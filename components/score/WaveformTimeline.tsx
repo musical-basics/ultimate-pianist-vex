@@ -35,6 +35,7 @@ export const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
     const audioDataRef = useRef<Float32Array | null>(null)
     const rafRef = useRef<number>(0)
     const [isLoaded, setIsLoaded] = useState(false)
+    const cursorTimeRef = useRef<number>(0)
 
     // Load audio data for waveform visualization
     useEffect(() => {
@@ -65,7 +66,6 @@ export const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
 
                 audioDataRef.current = downsampled
                 setIsLoaded(true)
-                drawWaveform()
                 ctx.close()
             } catch (err) {
                 console.error('[Waveform] Failed to load audio:', err)
@@ -75,11 +75,11 @@ export const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
         loadAudio()
     }, [audioUrl])
 
-    // Draw waveform on canvas
-    const drawWaveform = useCallback(() => {
+    // Draw waveform + cursor on canvas
+    const drawFrame = useCallback((cursorTime: number) => {
         const canvas = canvasRef.current
         const data = audioDataRef.current
-        if (!canvas || !data) return
+        if (!canvas) return
 
         const ctx = canvas.getContext('2d')
         if (!ctx) return
@@ -91,15 +91,17 @@ export const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
         ctx.fillStyle = darkMode ? '#18181b' : '#f4f4f5'
         ctx.fillRect(0, 0, width, height)
 
-        // Waveform
-        const barWidth = width / data.length
-        ctx.fillStyle = darkMode ? '#4b5563' : '#a1a1aa'
+        // Waveform bars
+        if (data) {
+            const barWidth = width / data.length
+            ctx.fillStyle = darkMode ? '#4b5563' : '#a1a1aa'
 
-        for (let i = 0; i < data.length; i++) {
-            const barHeight = data[i] * height * 0.8
-            const x = i * barWidth
-            const y = (height - barHeight) / 2
-            ctx.fillRect(x, y, Math.max(barWidth - 0.5, 0.5), barHeight)
+            for (let i = 0; i < data.length; i++) {
+                const barHeight = data[i] * height * 0.8
+                const x = i * barWidth
+                const y = (height - barHeight) / 2
+                ctx.fillRect(x, y, Math.max(barWidth - 0.5, 0.5), barHeight)
+            }
         }
 
         // Anchor markers
@@ -119,48 +121,56 @@ export const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
                 ctx.fillText(`M${anchor.measure}`, x + 3, 12)
             }
         }
-    }, [darkMode, anchors, duration])
 
-    // Redraw when anchors or dark mode change
-    useEffect(() => {
-        if (isLoaded) drawWaveform()
-    }, [isLoaded, drawWaveform])
-
-    // Playback cursor animation
-    useEffect(() => {
-        if (!isPlaying || !canvasRef.current || !duration) return
-
-        const animate = () => {
-            const canvas = canvasRef.current
-            if (!canvas) return
-
-            drawWaveform()
-
-            const ctx = canvas.getContext('2d')
-            if (!ctx) return
-
-            const pm = getPlaybackManager()
-            const time = pm.getTime()
-            const x = (time / duration) * canvas.width
-
-            // Cursor line
+        // Cursor line (always drawn)
+        if (duration > 0) {
+            const x = (cursorTime / duration) * width
             ctx.strokeStyle = '#ec4899'
             ctx.lineWidth = 2
             ctx.beginPath()
             ctx.moveTo(x, 0)
-            ctx.lineTo(x, canvas.height)
+            ctx.lineTo(x, height)
             ctx.stroke()
 
+            // Time label
+            const m = Math.floor(cursorTime / 60)
+            const s = Math.floor(cursorTime % 60)
+            ctx.fillStyle = '#ec4899'
+            ctx.font = '10px monospace'
+            ctx.fillText(`${m}:${s.toString().padStart(2, '0')}`, x + 3, height - 4)
+        }
+    }, [darkMode, anchors, duration])
+
+    // Redraw when anchors, dark mode, or loaded state changes
+    useEffect(() => {
+        if (isLoaded) drawFrame(cursorTimeRef.current)
+    }, [isLoaded, drawFrame])
+
+    // Continuous animation loop — runs during playback, one-shot when paused
+    useEffect(() => {
+        if (!isLoaded) return
+
+        const animate = () => {
+            const pm = getPlaybackManager()
+            const time = pm.getTime()
+            cursorTimeRef.current = time
+            drawFrame(time)
             rafRef.current = requestAnimationFrame(animate)
         }
 
-        rafRef.current = requestAnimationFrame(animate)
+        if (isPlaying) {
+            rafRef.current = requestAnimationFrame(animate)
+        } else {
+            // Draw once with current cursor position when paused
+            drawFrame(cursorTimeRef.current)
+        }
+
         return () => {
             if (rafRef.current) cancelAnimationFrame(rafRef.current)
         }
-    }, [isPlaying, duration, drawWaveform])
+    }, [isPlaying, isLoaded, drawFrame])
 
-    // Click to seek
+    // Click to seek — immediately update cursor and redraw
     const handleClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
         const canvas = canvasRef.current
         if (!canvas || !duration) return
@@ -168,7 +178,9 @@ export const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
         const rect = canvas.getBoundingClientRect()
         const x = e.clientX - rect.left
         const time = (x / rect.width) * duration
+        cursorTimeRef.current = time
         onSeek(time)
+        drawFrame(time)
     }
 
     // Resize canvas
@@ -182,12 +194,12 @@ export const WaveformTimeline: React.FC<WaveformTimelineProps> = ({
             canvas.height = container.clientHeight * window.devicePixelRatio
             canvas.style.width = `${container.clientWidth}px`
             canvas.style.height = `${container.clientHeight}px`
-            if (isLoaded) drawWaveform()
+            if (isLoaded) drawFrame(cursorTimeRef.current)
         })
 
         observer.observe(container)
         return () => observer.disconnect()
-    }, [isLoaded, drawWaveform])
+    }, [isLoaded, drawFrame])
 
     return (
         <div
