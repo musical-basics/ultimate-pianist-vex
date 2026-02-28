@@ -317,12 +317,13 @@ export default function AdminEditor() {
             const xmlRes = await fetch(config.xml_url)
             const xmlContent = await xmlRes.text()
 
-            setAiStatus('AI is analyzing audio — this may take a minute...')
+            setAiStatus(`AI is analyzing audio${anchors.length > 0 ? ` (using ${anchors.length} manual anchors as reference)` : ''}...`)
             const { predictAnchors } = await import('@/app/actions/ai')
             const result = await predictAnchors(
                 config.audio_url,
                 xmlContent,
-                100
+                100,
+                anchors // pass existing anchors as ground truth
             )
 
             if (result.anchors.length > 0) {

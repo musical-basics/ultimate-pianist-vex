@@ -8,6 +8,7 @@
 
 import { GoogleGenAI, Type } from '@google/genai'
 import { getConfigsWithCorrections } from '@/lib/services/configService'
+import type { Anchor } from '@/lib/types'
 
 const anchorArraySchema = {
     type: Type.ARRAY,
@@ -24,7 +25,8 @@ const anchorArraySchema = {
 export async function predictAnchors(
     audioUrl: string,
     xmlContent: string,
-    totalMeasures: number
+    totalMeasures: number,
+    existingAnchors: Anchor[] = []
 ): Promise<{ anchors: Array<{ measure: number; time: number }> }> {
     const apiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || ''
     if (!apiKey) throw new Error('GEMINI_API_KEY is not set')
@@ -37,36 +39,64 @@ export async function predictAnchors(
     const audioBase64 = Buffer.from(audioBuffer).toString('base64')
     const contentType = audioRes.headers.get('content-type') || 'audio/wav'
 
+    // Build existing anchor context for the prompt
+    let existingAnchorText = ''
+    if (existingAnchors.length > 0) {
+        const sorted = [...existingAnchors].sort((a, b) => a.measure - b.measure)
+        existingAnchorText = `
+
+CRITICAL — The user has already manually mapped ${sorted.length} measures by listening to the audio and aligning to note onsets/transients. These are GROUND TRUTH and must NOT be changed:
+
+${sorted.map((a) => `  Measure ${a.measure}: ${a.time.toFixed(2)}s`).join('\n')}
+
+Study the pattern of these manual mappings carefully:
+- Notice how the timing between measures varies (this is a real performance with rubato/tempo changes)
+- Measures are NOT evenly spaced — each measure aligns to where the first beat of that measure is actually heard in the audio
+- Your job is to continue this same mapping style for the REMAINING UNMAPPED measures
+- Listen to the audio transients (note attacks, chord changes, rhythmic accents) to find where each unmapped measure begins
+- The spacing between measures should reflect the actual musical phrasing, not a fixed interval
+
+Only return anchors for the UNMAPPED measures (measures NOT listed above).`
+    }
+
     // Dynamic few-shot: get past corrections for learning
     let fewShotText = ''
     try {
         const corrected = await getConfigsWithCorrections()
         if (corrected.length > 0) {
-            fewShotText = '\n\nHere are examples of correct mappings from previous songs:\n'
+            fewShotText = '\n\nHere are examples of correct mappings from other songs for reference:\n'
             for (const config of corrected.slice(0, 3)) {
                 fewShotText += `\nSong: "${config.title}"\n`
                 fewShotText += `Corrected anchors: ${JSON.stringify(config.anchors)}\n`
-                if (config.ai_anchors) {
-                    fewShotText += `AI predicted: ${JSON.stringify(config.ai_anchors)}\n`
-                }
             }
         }
     } catch {
         // Silently skip if corrections unavailable
     }
 
-    const prompt = `You are a music analysis AI. Given an audio recording and the corresponding MusicXML score, determine the exact timestamp (in seconds) when each measure begins.
+    const unmappedMeasures = existingAnchors.length > 0
+        ? `Only predict the UNMAPPED measures. The mapped measures (${existingAnchors.map(a => a.measure).join(', ')}) are already correct — do NOT include them in your response.`
+        : `Predict all ${totalMeasures} measures.`
 
-The piece has ${totalMeasures} measures. Return a JSON array where each object has:
+    const prompt = `You are a music transcription AI specialized in aligning audio recordings to MusicXML scores.
+
+TASK: Listen to the provided audio and determine the exact timestamp (in seconds) when each measure begins, by identifying note onsets and transients in the audio.
+
+${unmappedMeasures}
+
+RULES:
+1. Each measure's start time must align with an audible note onset, chord attack, or rhythmic accent in the audio
+2. Do NOT evenly divide the audio duration — real performances have tempo variations, rubato, ritardandos, accelerandos, and rests
+3. Listen for changes in harmony, melodic phrases, and rhythmic patterns to identify measure boundaries  
+4. Pay attention to time signature changes and pickup measures in the score
+5. Be precise to within 0.25 seconds${existingAnchorText}${fewShotText}
+
+Return a JSON array where each object has:
 - "measure": the measure number (1-indexed)
-- "time": the time in seconds when this measure begins
+- "time": the time in seconds when this measure begins (use decimals, e.g. 12.35)
 
-Listen carefully to the audio and align it with the score structure. The first measure usually starts at or near 0 seconds, but account for any pickup measures or silence at the beginning.
-
-Be precise — errors of more than 0.5 seconds per measure will require manual correction.${fewShotText}
-
-Here is the MusicXML content for reference:
-${xmlContent.substring(0, 5000)}${xmlContent.length > 5000 ? '\n... (truncated)' : ''}`
+MusicXML score for structural reference:
+${xmlContent.substring(0, 8000)}${xmlContent.length > 8000 ? '\n... (truncated)' : ''}`
 
     const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
