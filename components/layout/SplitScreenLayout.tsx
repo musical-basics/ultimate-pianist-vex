@@ -1,30 +1,22 @@
 'use client'
 
-/**
- * SplitScreenLayout — Top: Sheet Music (ScrollView), Bottom: Waterfall + Piano
- * Accepts isAdmin prop to show/hide editing controls.
- */
-
 import * as React from 'react'
 import { useRef, useEffect, useState, useCallback } from 'react'
 import { ScrollView } from '@/components/score/ScrollView'
 import { PianoKeyboard } from '@/components/synthesia/PianoKeyboard'
 import { useAppStore } from '@/lib/store'
-import { getPlaybackManager, destroyPlaybackManager } from '@/lib/engine/PlaybackManager'
+import { getPlaybackManager } from '@/lib/engine/PlaybackManager'
 import { AudioSynth } from '@/lib/engine/AudioSynth'
 import type { WaterfallRenderer } from '@/lib/engine/WaterfallRenderer'
 import type { ParsedMidi } from '@/lib/types'
 
 interface SplitScreenLayoutProps {
-    /** Audio URL for the master WAV clock */
     audioUrl: string | null
-    /** MusicXML URL for sheet music rendering */
     xmlUrl: string | null
-    /** Parsed MIDI data for the waterfall */
     parsedMidi: ParsedMidi | null
-    /** Whether this is the admin (editor) view or user (playback) view */
     isAdmin?: boolean
-    /** Children to render in the header area (e.g., toolbar) */
+    onUpdateAnchor?: (measure: number, time: number) => void
+    onUpdateBeatAnchor?: (measure: number, beat: number, time: number) => void
     children?: React.ReactNode
 }
 
@@ -33,9 +25,11 @@ export const SplitScreenLayout: React.FC<SplitScreenLayoutProps> = ({
     xmlUrl,
     parsedMidi,
     isAdmin = false,
+    onUpdateAnchor,
+    onUpdateBeatAnchor,
     children,
 }) => {
-    // ─── Store ──────────────────────────────────────────────────────
+    // ─── Store Connections ──────────────────────────────────────────
     const isPlaying = useAppStore((s) => s.isPlaying)
     const anchors = useAppStore((s) => s.anchors)
     const beatAnchors = useAppStore((s) => s.beatAnchors)
@@ -44,19 +38,20 @@ export const SplitScreenLayout: React.FC<SplitScreenLayoutProps> = ({
     const highlightNote = useAppStore((s) => s.highlightNote)
     const glowEffect = useAppStore((s) => s.glowEffect)
     const popEffect = useAppStore((s) => s.popEffect)
+    const jumpEffect = useAppStore((s) => s.jumpEffect)
     const isLocked = useAppStore((s) => s.isLocked)
     const cursorPosition = useAppStore((s) => s.cursorPosition)
+    const curtainLookahead = useAppStore((s) => s.curtainLookahead)
     const showCursor = useAppStore((s) => s.showCursor)
     const setCurrentMeasure = useAppStore((s) => s.setCurrentMeasure)
+    const duration = useAppStore((s) => s.duration)
 
-    // ─── Refs ───────────────────────────────────────────────────────
     const waterfallContainerRef = useRef<HTMLDivElement>(null)
     const audioRef = useRef<HTMLAudioElement | null>(null)
     const audioSynthRef = useRef<AudioSynth | null>(null)
     const rendererRef = useRef<WaterfallRenderer | null>(null)
     const [rendererReady, setRendererReady] = useState(false)
 
-    // ─── Audio Element Setup ────────────────────────────────────────
     useEffect(() => {
         if (!audioUrl) return
 
@@ -64,14 +59,9 @@ export const SplitScreenLayout: React.FC<SplitScreenLayoutProps> = ({
         audio.crossOrigin = 'anonymous'
         audioRef.current = audio
 
-        // Set as master clock in PlaybackManager
         const pm = getPlaybackManager()
         pm.setAudioElement(audio)
-
-        // Set duration when metadata loads
-        audio.addEventListener('loadedmetadata', () => {
-            pm.duration = audio.duration
-        })
+        audio.addEventListener('loadedmetadata', () => { pm.duration = audio.duration })
 
         return () => {
             audio.pause()
@@ -80,7 +70,6 @@ export const SplitScreenLayout: React.FC<SplitScreenLayoutProps> = ({
         }
     }, [audioUrl])
 
-    // ─── WaterfallRenderer Init ─────────────────────────────────────
     useEffect(() => {
         let isCancelled = false
         let localRenderer: WaterfallRenderer | null = null
@@ -123,21 +112,18 @@ export const SplitScreenLayout: React.FC<SplitScreenLayoutProps> = ({
         }
     }, [])
 
-    // ─── Load MIDI into renderer ────────────────────────────────────
     useEffect(() => {
         if (parsedMidi && rendererRef.current) {
             rendererRef.current.loadNotes(parsedMidi)
         }
     }, [parsedMidi, rendererReady])
 
-    // ─── Sync AudioSynth mute when WAV is active ────────────────────
     useEffect(() => {
         if (audioSynthRef.current) {
             audioSynthRef.current.masterAudioActive = !!audioUrl
         }
     }, [audioUrl])
 
-    // ─── Cleanup ────────────────────────────────────────────────────
     useEffect(() => {
         return () => {
             audioSynthRef.current?.destroy()
@@ -149,7 +135,6 @@ export const SplitScreenLayout: React.FC<SplitScreenLayoutProps> = ({
         setCurrentMeasure(measure)
     }, [setCurrentMeasure])
 
-    // ─── Drag-to-resize state ─────────────────────────────────────
     const [topPercent, setTopPercent] = useState(45)
     const isDraggingRef = useRef(false)
     const containerFullRef = useRef<HTMLDivElement>(null)
@@ -177,10 +162,8 @@ export const SplitScreenLayout: React.FC<SplitScreenLayoutProps> = ({
 
     return (
         <div ref={containerFullRef} className="flex flex-col h-full w-full overflow-hidden bg-zinc-950">
-            {/* Optional header/toolbar */}
             {children}
 
-            {/* Top: Sheet Music */}
             <div style={{ height: `${topPercent}%` }} className="relative overflow-hidden shrink-0">
                 <ScrollView
                     xmlUrl={xmlUrl}
@@ -193,14 +176,18 @@ export const SplitScreenLayout: React.FC<SplitScreenLayoutProps> = ({
                     highlightNote={highlightNote}
                     glowEffect={glowEffect}
                     popEffect={popEffect}
+                    jumpEffect={jumpEffect}
                     isLocked={isLocked}
                     cursorPosition={cursorPosition}
+                    curtainLookahead={curtainLookahead}
                     showCursor={showCursor}
+                    duration={duration}
                     onMeasureChange={handleMeasureChange}
+                    onUpdateAnchor={isAdmin ? onUpdateAnchor : undefined}
+                    onUpdateBeatAnchor={isAdmin ? onUpdateBeatAnchor : undefined}
                 />
             </div>
 
-            {/* Drag handle */}
             <div
                 onMouseDown={onMouseDown}
                 className="h-2 bg-zinc-700 hover:bg-purple-500 active:bg-purple-500 cursor-row-resize flex items-center justify-center transition-colors shrink-0 select-none"
@@ -208,14 +195,9 @@ export const SplitScreenLayout: React.FC<SplitScreenLayoutProps> = ({
                 <div className="w-10 h-1 rounded-full bg-zinc-500" />
             </div>
 
-            {/* Bottom: Waterfall + Piano */}
             <div className="flex-1 flex flex-col overflow-hidden min-h-0">
-                {/* Waterfall canvas */}
                 <div className="flex-1 relative bg-black/50 min-h-0">
-                    <div
-                        ref={waterfallContainerRef}
-                        className="relative w-full h-full"
-                    >
+                    <div ref={waterfallContainerRef} className="relative w-full h-full">
                         {!rendererReady && (
                             <div className="absolute inset-0 flex items-center justify-center">
                                 <div className="text-center space-y-2 opacity-30">
@@ -229,7 +211,6 @@ export const SplitScreenLayout: React.FC<SplitScreenLayoutProps> = ({
                     </div>
                 </div>
 
-                {/* Piano Keyboard */}
                 <PianoKeyboard />
             </div>
         </div>

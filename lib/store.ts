@@ -51,7 +51,7 @@ interface AppStore {
 
     // === Score Follower Actions ===
     setAnchors: (anchors: Anchor[]) => void
-    setBeatAnchors: (beatAnchors: BeatAnchor[]) => void
+    setBeatAnchors: (beatAnchors: BeatAnchor[] | ((prev: BeatAnchor[]) => BeatAnchor[])) => void
     setRevealMode: (mode: 'OFF' | 'NOTE' | 'CURTAIN') => void
     setDarkMode: (dark: boolean) => void
     setHighlightNote: (highlight: boolean) => void
@@ -125,7 +125,7 @@ export const useAppStore = create<AppStore>((set) => ({
 
     // === Score Follower Actions ===
     setAnchors: (anchors) => set({ anchors }),
-    setBeatAnchors: (beatAnchors) => set({ beatAnchors }),
+    setBeatAnchors: (beatAnchors) => set((s) => ({ beatAnchors: typeof beatAnchors === 'function' ? beatAnchors(s.beatAnchors) : beatAnchors })),
     setRevealMode: (revealMode) => set({ revealMode }),
     setDarkMode: (darkMode) => set({ darkMode }),
     setHighlightNote: (highlightNote) => set({ highlightNote }),
