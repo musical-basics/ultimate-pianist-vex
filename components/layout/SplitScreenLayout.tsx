@@ -181,7 +181,10 @@ export const SplitScreenLayout: React.FC<SplitScreenLayoutProps> = ({
                     />
                 </ResizablePanel>
 
-                <ResizableHandle withHandle className="bg-zinc-800 data-[resize-handle-state=hover]:bg-purple-600/50" />
+                <ResizableHandle
+                    withHandle
+                    className="bg-zinc-700 h-2 data-[resize-handle-state=hover]:bg-purple-500 data-[resize-handle-state=drag]:bg-purple-500 transition-colors [&>div]:bg-zinc-600 [&>div]:h-5 [&>div]:w-8 [&>div]:rounded-full [&>div]:border-zinc-500"
+                />
 
                 {/* Bottom: Waterfall + Piano */}
                 <ResizablePanel defaultSize={55} minSize={20} maxSize={80}>
