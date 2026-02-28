@@ -562,6 +562,7 @@ export default function AdminEditor() {
                         isPlaying={isPlaying}
                         duration={duration}
                         onSeek={handleSeek}
+                        onAnchorDrag={handleSetAnchor}
                         darkMode={darkMode}
                     />
                 </div>
