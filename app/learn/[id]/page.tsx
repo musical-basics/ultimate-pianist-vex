@@ -48,8 +48,8 @@ export default function LearnPlayback() {
     useEffect(() => {
         const load = async () => {
             try {
-                const { getConfigById } = await import('@/lib/services/configService')
-                const data = await getConfigById(configId)
+                const { fetchConfigById } = await import('@/app/actions/config')
+                const data = await fetchConfigById(configId)
                 if (data) {
                     setConfig(data)
                     if (data.anchors) setAnchors(data.anchors)

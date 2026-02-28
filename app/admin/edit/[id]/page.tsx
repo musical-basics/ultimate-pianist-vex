@@ -24,6 +24,13 @@ import { useAppStore } from '@/lib/store'
 import { getPlaybackManager } from '@/lib/engine/PlaybackManager'
 import { parseMidiFile } from '@/lib/midi/parser'
 import type { SongConfig, Anchor, ParsedMidi } from '@/lib/types'
+import {
+    fetchConfigById,
+    updateConfigAction,
+    uploadAudioAction,
+    uploadXmlAction,
+    uploadMidiAction,
+} from '@/app/actions/config'
 
 export default function AdminEditor() {
     const params = useParams()
@@ -77,8 +84,7 @@ export default function AdminEditor() {
     useEffect(() => {
         const load = async () => {
             try {
-                const { getConfigById } = await import('@/lib/services/configService')
-                const data = await getConfigById(configId)
+                const data = await fetchConfigById(configId)
                 if (data) {
                     setConfig(data)
                     setTitle(data.title)
@@ -119,8 +125,7 @@ export default function AdminEditor() {
     const handleSave = async () => {
         try {
             setSaving(true)
-            const { updateConfig } = await import('@/lib/services/configService')
-            await updateConfig(configId, {
+            await updateConfigAction(configId, {
                 title,
                 anchors,
                 beat_anchors: beatAnchors,
@@ -141,9 +146,10 @@ export default function AdminEditor() {
         if (!file) return
 
         try {
-            const { uploadAudio, updateConfig } = await import('@/lib/services/configService')
-            const url = await uploadAudio(file, configId)
-            await updateConfig(configId, { audio_url: url })
+            const formData = new FormData()
+            formData.append('file', file)
+            const url = await uploadAudioAction(formData, configId)
+            await updateConfigAction(configId, { audio_url: url })
             setConfig((prev) => prev ? { ...prev, audio_url: url } : prev)
             console.log('[Admin] Audio uploaded:', url)
         } catch (err) {
@@ -157,9 +163,10 @@ export default function AdminEditor() {
         if (!file) return
 
         try {
-            const { uploadXml, updateConfig } = await import('@/lib/services/configService')
-            const url = await uploadXml(file, configId)
-            await updateConfig(configId, { xml_url: url })
+            const formData = new FormData()
+            formData.append('file', file)
+            const url = await uploadXmlAction(formData, configId)
+            await updateConfigAction(configId, { xml_url: url })
             setConfig((prev) => prev ? { ...prev, xml_url: url } : prev)
             console.log('[Admin] XML uploaded:', url)
         } catch (err) {
@@ -173,9 +180,10 @@ export default function AdminEditor() {
         if (!file) return
 
         try {
-            const { uploadMidi, updateConfig } = await import('@/lib/services/configService')
-            const url = await uploadMidi(file, configId)
-            await updateConfig(configId, { midi_url: url })
+            const formData = new FormData()
+            formData.append('file', file)
+            const url = await uploadMidiAction(formData, configId)
+            await updateConfigAction(configId, { midi_url: url })
             setConfig((prev) => prev ? { ...prev, midi_url: url } : prev)
 
             // Also parse the MIDI locally
@@ -258,8 +266,7 @@ export default function AdminEditor() {
 
     const handleTeachAI = async () => {
         try {
-            const { updateConfig } = await import('@/lib/services/configService')
-            await updateConfig(configId, { ai_anchors: anchors })
+            await updateConfigAction(configId, { ai_anchors: anchors })
             console.log('[AI] Teaching data saved')
         } catch (err) {
             console.error('[AI] Teaching failed:', err)

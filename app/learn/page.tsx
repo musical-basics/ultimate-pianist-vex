@@ -17,8 +17,8 @@ export default function LearnPage() {
     useEffect(() => {
         const load = async () => {
             try {
-                const { getPublishedConfigs } = await import('@/lib/services/configService')
-                const data = await getPublishedConfigs()
+                const { fetchPublishedConfigs } = await import('@/app/actions/config')
+                const data = await fetchPublishedConfigs()
                 setConfigs(data)
             } catch (err) {
                 console.error('Failed to load published configs:', err)

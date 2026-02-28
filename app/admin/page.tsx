@@ -9,6 +9,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Plus, Pencil, Trash2, Globe, GlobeLock, Music, FileMusic } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { fetchAllConfigs, createNewConfig, deleteConfigAction, togglePublishAction } from '@/app/actions/config'
 import type { SongConfig } from '@/lib/types'
 
 export default function AdminDashboard() {
@@ -19,8 +20,7 @@ export default function AdminDashboard() {
     const loadConfigs = async () => {
         try {
             setLoading(true)
-            const { getAllConfigs } = await import('@/lib/services/configService')
-            const data = await getAllConfigs()
+            const data = await fetchAllConfigs()
             setConfigs(data)
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to load configs')
@@ -35,8 +35,7 @@ export default function AdminDashboard() {
 
     const handleCreate = async () => {
         try {
-            const { createConfig } = await import('@/lib/services/configService')
-            const config = await createConfig()
+            const config = await createNewConfig()
             window.location.href = `/admin/edit/${config.id}`
         } catch (err) {
             console.error('Failed to create config:', err)
@@ -47,8 +46,7 @@ export default function AdminDashboard() {
         if (!confirm('Delete this configuration? This cannot be undone.')) return
 
         try {
-            const { deleteConfig } = await import('@/lib/services/configService')
-            await deleteConfig(id)
+            await deleteConfigAction(id)
             setConfigs((prev) => prev.filter((c) => c.id !== id))
         } catch (err) {
             console.error('Failed to delete config:', err)
@@ -57,8 +55,7 @@ export default function AdminDashboard() {
 
     const handleTogglePublish = async (id: string, currentState: boolean) => {
         try {
-            const { togglePublish } = await import('@/lib/services/configService')
-            await togglePublish(id, !currentState)
+            await togglePublishAction(id, !currentState)
             setConfigs((prev) =>
                 prev.map((c) => (c.id === id ? { ...c, is_published: !currentState } : c))
             )
@@ -173,8 +170,8 @@ export default function AdminDashboard() {
                                 <button
                                     onClick={() => handleTogglePublish(config.id, !!config.is_published)}
                                     className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-full w-fit transition-colors ${config.is_published
-                                            ? 'bg-green-900/30 text-green-400 hover:bg-green-900/50'
-                                            : 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700'
+                                        ? 'bg-green-900/30 text-green-400 hover:bg-green-900/50'
+                                        : 'bg-zinc-800 text-zinc-500 hover:bg-zinc-700'
                                         }`}
                                 >
                                     {config.is_published ? <Globe className="w-3 h-3" /> : <GlobeLock className="w-3 h-3" />}
