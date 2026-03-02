@@ -410,7 +410,7 @@ export function stepV5(
             const newAqntl = (state.aqntl * 0.7) + (instantAqntl * 0.3)
             const nextIndex = state.currentEventIndex + 1
 
-            console.log(`[V5] ✓ M${xmlEvent.measure} B${xmlEvent.beat} → ${anchorTime.toFixed(3)}s (wide scan) | AQNTL=${newAqntl.toFixed(3)}s`)
+            console.log(`[V5] ✓ M${xmlEvent.measure} B${xmlEvent.beat} → ${anchorTime.toFixed(3)}s (wide scan) | AQNTL=${newAqntl.toFixed(3)}s${xmlEvent.hasFermata ? ' 🎵FERMATA→afterFermata=true' : ''}`)
 
             return {
                 ...state,
@@ -422,7 +422,8 @@ export function stepV5(
                 currentEventIndex: nextIndex,
                 lastAnchorTime: anchorTime,
                 lastAnchorGlobalBeat: xmlEvent.globalBeat,
-                consecutiveMisses: 0, // Reset on match
+                afterFermata: xmlEvent.hasFermata || false, // ← THIS WAS MISSING!
+                consecutiveMisses: 0,
                 recentOutcomes: pushOutcome(state.recentOutcomes, 'match'),
                 status: nextIndex >= xmlEvents.length ? 'done' : 'running',
             }
