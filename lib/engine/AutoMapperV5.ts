@@ -224,15 +224,89 @@ export function stepV5(
             status: nextIndex >= xmlEvents.length ? 'done' : 'running',
         }
     } else {
-        // --- NO MATCH: PAUSE with ghost anchor ---
-        const ghostTime = state.lastAnchorTime + expectedDelta
+        // --- NO MATCH ---
+        // Before pausing, try a wider scan (±50% buffer instead of 20%)
+        const wideBuffer = expectedDelta * 0.50
+        const wideStart = state.lastAnchorTime - wideBuffer * 0.5
+        const wideEnd = state.lastAnchorTime + expectedDelta + wideBuffer
+        const wideMatches = scanWindow(xmlEvent.pitches, sorted, state.midiCursor, wideStart, wideEnd)
 
-        console.warn(`[V5] ✗ No pitch match for M${xmlEvent.measure} B${xmlEvent.beat} (expected [${xmlEvent.pitches}]). Ghost anchor at ${ghostTime.toFixed(3)}s`)
+        if (wideMatches.length > 0) {
+            // Found with wider window — proceed as normal match
+            const anchorTime = wideMatches[0].time
+            const chordThreshold = state.aqntl * state.chordThresholdFraction
+            const chord = extractChord(xmlEvent.pitches, sorted, wideMatches[0].index, anchorTime, chordThreshold)
+
+            const newAnchors = [...state.anchors]
+            const newBeatAnchors = [...state.beatAnchors]
+            const isNewMeasure = state.anchors.length === 0 || state.anchors[state.anchors.length - 1].measure !== xmlEvent.measure
+            if (isNewMeasure) newAnchors.push({ measure: xmlEvent.measure, time: anchorTime })
+            if (xmlEvent.beat > 1.01) newBeatAnchors.push({ measure: xmlEvent.measure, beat: xmlEvent.beat, time: anchorTime })
+
+            const actualDelta = anchorTime - state.lastAnchorTime
+            const instantAqntl = actualDelta / beatsElapsed
+            const newAqntl = (state.aqntl * 0.7) + (instantAqntl * 0.3)
+            const nextIndex = state.currentEventIndex + 1
+
+            console.log(`[V5] ✓ M${xmlEvent.measure} B${xmlEvent.beat} → ${anchorTime.toFixed(3)}s (wide scan) | AQNTL=${newAqntl.toFixed(3)}s`)
+
+            return {
+                ...state,
+                anchors: newAnchors,
+                beatAnchors: newBeatAnchors,
+                ghostAnchor: null,
+                aqntl: newAqntl,
+                midiCursor: chord.lastIndex + 1,
+                currentEventIndex: nextIndex,
+                lastAnchorTime: anchorTime,
+                lastAnchorGlobalBeat: xmlEvent.globalBeat,
+                status: nextIndex >= xmlEvents.length ? 'done' : 'running',
+            }
+        }
+
+        // Still no match — dead-reckon this beat using AQNTL and skip
+        // This handles held notes, rests, or ornamental passages with no new onset
+        const deadReckonTime = state.lastAnchorTime + expectedDelta
+
+        // Check: is the NEXT event close enough to try matching instead?
+        // If so, dead-reckon this beat and move on (don't pause)
+        const nextIndex = state.currentEventIndex + 1
+        if (nextIndex < xmlEvents.length) {
+            const nextEvent = xmlEvents[nextIndex]
+            const nextBeatsElapsed = nextEvent.globalBeat - xmlEvent.globalBeat
+
+            // Only dead-reckon if the gap is small (≤ 2 beats) — otherwise pause for user
+            if (nextBeatsElapsed <= 2) {
+                console.log(`[V5] ⏩ Dead-reckon M${xmlEvent.measure} B${xmlEvent.beat} → ${deadReckonTime.toFixed(3)}s (no onset, skipping)`)
+
+                // Place the anchor via dead reckoning
+                const newAnchors = [...state.anchors]
+                const newBeatAnchors = [...state.beatAnchors]
+                const isNewMeasure = state.anchors.length === 0 || state.anchors[state.anchors.length - 1].measure !== xmlEvent.measure
+                if (isNewMeasure) newAnchors.push({ measure: xmlEvent.measure, time: deadReckonTime })
+                if (xmlEvent.beat > 1.01) newBeatAnchors.push({ measure: xmlEvent.measure, beat: xmlEvent.beat, time: deadReckonTime })
+
+                return {
+                    ...state,
+                    anchors: newAnchors,
+                    beatAnchors: newBeatAnchors,
+                    ghostAnchor: null,
+                    currentEventIndex: nextIndex,
+                    lastAnchorTime: deadReckonTime,
+                    lastAnchorGlobalBeat: xmlEvent.globalBeat,
+                    // Don't update AQNTL — dead reckoning doesn't give us new tempo info
+                    status: nextIndex >= xmlEvents.length ? 'done' : 'running',
+                }
+            }
+        }
+
+        // Large gap or end of piece — pause for user intervention
+        console.warn(`[V5] ✗ No match for M${xmlEvent.measure} B${xmlEvent.beat} (expected [${xmlEvent.pitches}]). Ghost at ${deadReckonTime.toFixed(3)}s`)
 
         return {
             ...state,
             status: 'paused',
-            ghostAnchor: { measure: xmlEvent.measure, beat: xmlEvent.beat, time: ghostTime },
+            ghostAnchor: { measure: xmlEvent.measure, beat: xmlEvent.beat, time: deadReckonTime },
         }
     }
 }
