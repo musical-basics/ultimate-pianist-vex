@@ -184,8 +184,28 @@ export function stepV5(
     if (matches.length > 0) {
         // --- MATCH FOUND ---
         const anchorTime = matches[0].time
-        const chordThreshold = state.aqntl * state.chordThresholdFraction
+        // Chord threshold: user-configured fraction of AQNTL, but at least 100ms for rolled chords
+        const chordThreshold = Math.max(0.100, state.aqntl * state.chordThresholdFraction)
         const chord = extractChord(xmlEvent.pitches, sorted, matches[0].index, anchorTime, chordThreshold)
+
+        // Match quality check: if we only matched a small fraction of expected pitches,
+        // this is likely a stray note from a rolled chord bleeding into the next beat.
+        // Skip it and continue scanning from after this stray note.
+        const expectedCount = xmlEvent.pitches.length
+        const matchedCount = chord.notes.length
+        const matchRatio = matchedCount / expectedCount
+
+        if (expectedCount >= 3 && matchRatio < 0.5) {
+            // Stray note — not enough pitches matched. Skip past it.
+            console.warn(`[V5] ⚠ Stray note at M${xmlEvent.measure} B${xmlEvent.beat}: only ${matchedCount}/${expectedCount} pitches matched (${chord.notes.map(n => n.pitch).join(',')}). Skipping.`)
+
+            // Advance midiCursor past the stray note and try again
+            return {
+                ...state,
+                midiCursor: chord.lastIndex + 1,
+                // Don't advance currentEventIndex — re-try this same XML event
+            }
+        }
 
         // Build new anchors
         const newAnchors = [...state.anchors]
@@ -209,7 +229,7 @@ export function stepV5(
 
         const nextIndex = state.currentEventIndex + 1
 
-        console.log(`[V5] ✓ M${xmlEvent.measure} B${xmlEvent.beat} → ${anchorTime.toFixed(3)}s | pitches=[${chord.notes.map(n => n.pitch)}] | AQNTL=${newAqntl.toFixed(3)}s (${(60 / newAqntl).toFixed(1)} BPM)`)
+        console.log(`[V5] ✓ M${xmlEvent.measure} B${xmlEvent.beat} → ${anchorTime.toFixed(3)}s | matched ${matchedCount}/${expectedCount} pitches=[${chord.notes.map(n => n.pitch)}] | AQNTL=${newAqntl.toFixed(3)}s (${(60 / newAqntl).toFixed(1)} BPM)`)
 
         return {
             ...state,
