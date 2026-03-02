@@ -270,16 +270,36 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
                                     // eslint-disable-next-line @typescript-eslint/no-explicit-any
                                     try {
                                         const ve = n.sourceNote?.ParentVoiceEntry;
+                                        // VERBOSE: Log all articulations for fermata-relevant measures
+                                        if (measureNumber >= 17 && measureNumber <= 19 && ve) {
+                                            const arts = ve.Articulations;
+                                            if (arts && arts.length > 0) {
+                                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                                const artDetails = arts.map((a: any) => {
+                                                    const info: Record<string, unknown> = {};
+                                                    try { info.enum = a.articulationEnum; } catch { info.enum = '?'; }
+                                                    try { info.type = typeof a.articulationEnum; } catch { }
+                                                    try { info.keys = Object.keys(a).join(','); } catch { }
+                                                    return JSON.stringify(info);
+                                                });
+                                                console.log(`[FERMATA DEBUG] M${measureNumber} B${beatVal}: ${arts.length} articulation(s): [${artDetails.join('; ')}]`);
+                                            }
+                                        }
                                         if (ve?.Articulations) {
                                             // eslint-disable-next-line @typescript-eslint/no-explicit-any
                                             ve.Articulations.forEach((art: any) => {
                                                 // ArticulationEnum: fermata=10, invertedfermata=11
                                                 if (art.articulationEnum === 10 || art.articulationEnum === 11) {
                                                     acc.hasFermata = true;
+                                                    console.log(`[FERMATA] ✓ Detected fermata at M${measureNumber} B${beatVal}`);
                                                 }
                                             });
                                         }
-                                    } catch { /* ignore fermata detection errors */ }
+                                    } catch (err) {
+                                        if (measureNumber >= 17 && measureNumber <= 19) {
+                                            console.error(`[FERMATA DEBUG] Error at M${measureNumber} B${beatVal}:`, err);
+                                        }
+                                    }
                                 });
                             });
                         });
