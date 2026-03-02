@@ -146,7 +146,7 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
             const beatPositions = new Map<number, number>()
             const uniqueFractionalBeats = new Set<number>()
             // V5: per-beat accumulator for pitches and smallest duration
-            const beatAccumulator = new Map<number, { pitches: Set<number>, smallestDur: number }>()
+            const beatAccumulator = new Map<number, { pitches: Set<number>, smallestDur: number, hasFermata: boolean }>()
 
             if (staves.length > 0) {
                 const pos = staves[0].PositionAndShape
@@ -260,11 +260,26 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
                                         : 1; // default to quarter note
 
                                     if (!beatAccumulator.has(beatVal)) {
-                                        beatAccumulator.set(beatVal, { pitches: new Set(), smallestDur: durQuarters });
+                                        beatAccumulator.set(beatVal, { pitches: new Set(), smallestDur: durQuarters, hasFermata: false });
                                     }
                                     const acc = beatAccumulator.get(beatVal)!;
                                     acc.pitches.add(midiPitch);
                                     if (durQuarters < acc.smallestDur) acc.smallestDur = durQuarters;
+
+                                    // Check for fermata in articulations
+                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                    try {
+                                        const ve = n.sourceNote?.ParentVoiceEntry;
+                                        if (ve?.Articulations) {
+                                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                            ve.Articulations.forEach((art: any) => {
+                                                // ArticulationEnum: fermata=10, invertedfermata=11
+                                                if (art.articulationEnum === 10 || art.articulationEnum === 11) {
+                                                    acc.hasFermata = true;
+                                                }
+                                            });
+                                        }
+                                    } catch { /* ignore fermata detection errors */ }
                                 });
                             });
                         });
@@ -283,6 +298,7 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
                             globalBeat: cumulativeBeats + (b - 1), // beat 1 of measure = cumulativeBeats + 0
                             pitches: pitchArr,
                             smallestDuration: acc ? acc.smallestDur : 1,
+                            hasFermata: acc ? acc.hasFermata : false,
                         });
 
                         // VERBOSE: Log the final XML event

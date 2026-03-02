@@ -12,6 +12,21 @@ export { getAudioOffset } from './AutoMapper'
 
 // ─── Helpers ───────────────────────────────────────────────────────────
 
+type Outcome = 'match' | 'dead-reckon' | 'stray'
+
+/** Track recent outcomes, keeping only the last 10 */
+function pushOutcome(outcomes: Outcome[], outcome: Outcome): Outcome[] {
+    const updated = [...outcomes, outcome]
+    return updated.length > 10 ? updated.slice(-10) : updated
+}
+
+/** Check if 70%+ of last 10 outcomes are non-matches (runaway) */
+function isRunaway(outcomes: Outcome[]): boolean {
+    if (outcomes.length < 10) return false
+    const badCount = outcomes.filter((o: Outcome) => o !== 'match').length
+    return badCount >= 7
+}
+
 /** Find first MIDI note whose pitch matches any of the expected pitches */
 function findFirstPitchMatch(
     expectedPitches: number[],
@@ -96,6 +111,7 @@ export function initV5(
         chordThresholdFraction,
         lastAnchorTime: 0,
         lastAnchorGlobalBeat: 0,
+        recentOutcomes: [],
     }
 
     if (midiNotes.length === 0 || xmlEvents.length === 0) {
@@ -199,9 +215,23 @@ export function stepV5(
             // Stray note — not enough pitches matched. Skip past it.
             console.warn(`[V5] ⚠ Stray note at M${xmlEvent.measure} B${xmlEvent.beat}: only ${matchedCount}/${expectedCount} pitches matched (${chord.notes.map(n => n.pitch).join(',')}). Skipping.`)
 
+            // Track outcome and check for runaway
+            const outcomes = pushOutcome(state.recentOutcomes, 'stray')
+            if (isRunaway(outcomes)) {
+                console.warn(`[V5] 🛑 Runaway detected (${outcomes.filter(o => o !== 'match').length}/10 bad). Pausing.`)
+                const ghostTime = state.lastAnchorTime + expectedDelta
+                return {
+                    ...state,
+                    recentOutcomes: outcomes,
+                    status: 'paused',
+                    ghostAnchor: { measure: xmlEvent.measure, beat: xmlEvent.beat, time: ghostTime },
+                }
+            }
+
             // Advance midiCursor past the stray note and try again
             return {
                 ...state,
+                recentOutcomes: outcomes,
                 midiCursor: chord.lastIndex + 1,
                 // Don't advance currentEventIndex — re-try this same XML event
             }
@@ -223,13 +253,16 @@ export function stepV5(
         }
 
         // Update AQNTL with exponential moving average (70/30 smoothing)
+        // Skip AQNTL update if this beat has a fermata (performer slowed down, would corrupt tempo)
         const actualDelta = anchorTime - state.lastAnchorTime
         const instantAqntl = actualDelta / beatsElapsed
-        const newAqntl = (state.aqntl * 0.7) + (instantAqntl * 0.3)
+        const newAqntl = xmlEvent.hasFermata
+            ? state.aqntl  // Preserve current AQNTL for fermata beats
+            : (state.aqntl * 0.7) + (instantAqntl * 0.3)
 
         const nextIndex = state.currentEventIndex + 1
 
-        console.log(`[V5] ✓ M${xmlEvent.measure} B${xmlEvent.beat} → ${anchorTime.toFixed(3)}s | matched ${matchedCount}/${expectedCount} pitches=[${chord.notes.map(n => n.pitch)}] | AQNTL=${newAqntl.toFixed(3)}s (${(60 / newAqntl).toFixed(1)} BPM)`)
+        console.log(`[V5] ✓ M${xmlEvent.measure} B${xmlEvent.beat} → ${anchorTime.toFixed(3)}s | matched ${matchedCount}/${expectedCount} pitches=[${chord.notes.map(n => n.pitch)}] | AQNTL=${newAqntl.toFixed(3)}s (${(60 / newAqntl).toFixed(1)} BPM)${xmlEvent.hasFermata ? ' 🎵FERMATA' : ''}`)
 
         return {
             ...state,
@@ -241,6 +274,7 @@ export function stepV5(
             currentEventIndex: nextIndex,
             lastAnchorTime: anchorTime,
             lastAnchorGlobalBeat: xmlEvent.globalBeat,
+            recentOutcomes: pushOutcome(state.recentOutcomes, 'match'),
             status: nextIndex >= xmlEvents.length ? 'done' : 'running',
         }
     } else {
@@ -280,7 +314,57 @@ export function stepV5(
                 currentEventIndex: nextIndex,
                 lastAnchorTime: anchorTime,
                 lastAnchorGlobalBeat: xmlEvent.globalBeat,
+                recentOutcomes: pushOutcome(state.recentOutcomes, 'match'),
                 status: nextIndex >= xmlEvents.length ? 'done' : 'running',
+            }
+        }
+
+        // ─── FERMATA HANDLING ───
+        // If current event has a fermata and normal scanning failed:
+        // Dead-reckon this beat, then do a fresh scan for the NEXT event's pitches
+        // starting from the dead-reckoned time (like finding the first note again)
+        if (xmlEvent.hasFermata && state.currentEventIndex + 1 < xmlEvents.length) {
+            const deadReckonTime = state.lastAnchorTime + expectedDelta
+            const nextIdx = state.currentEventIndex + 1
+            const nextEvent = xmlEvents[nextIdx]
+
+            // Fresh scan: search for next event's pitches starting from dead-reckoned time
+            const freshMatch = findFirstPitchMatch(nextEvent.pitches, sorted, state.midiCursor)
+
+            if (freshMatch && freshMatch.time >= deadReckonTime - 0.5) {
+                // Found the note after the fermata!
+                const chordThreshold = Math.max(0.100, state.aqntl * state.chordThresholdFraction)
+                const chord = extractChord(nextEvent.pitches, sorted, freshMatch.index, freshMatch.time, chordThreshold)
+
+                // Place dead-reckoned anchor for the fermata beat
+                const newAnchors = [...state.anchors]
+                const newBeatAnchors = [...state.beatAnchors]
+                const isNewMeasureFermata = state.anchors.length === 0 || state.anchors[state.anchors.length - 1].measure !== xmlEvent.measure
+                if (isNewMeasureFermata) newAnchors.push({ measure: xmlEvent.measure, time: deadReckonTime })
+                if (xmlEvent.beat > 1.01) newBeatAnchors.push({ measure: xmlEvent.measure, beat: xmlEvent.beat, time: deadReckonTime })
+
+                // Place anchor for the next event (post-fermata)
+                const isNewMeasureNext = newAnchors[newAnchors.length - 1].measure !== nextEvent.measure
+                if (isNewMeasureNext) newAnchors.push({ measure: nextEvent.measure, time: freshMatch.time })
+                if (nextEvent.beat > 1.01) newBeatAnchors.push({ measure: nextEvent.measure, beat: nextEvent.beat, time: freshMatch.time })
+
+                const advancedIndex = nextIdx + 1
+
+                console.log(`[V5] 🎵 Fermata at M${xmlEvent.measure} B${xmlEvent.beat} → dead-reckon ${deadReckonTime.toFixed(3)}s, then fresh match M${nextEvent.measure} B${nextEvent.beat} → ${freshMatch.time.toFixed(3)}s`)
+
+                return {
+                    ...state,
+                    anchors: newAnchors,
+                    beatAnchors: newBeatAnchors,
+                    ghostAnchor: null,
+                    aqntl: state.aqntl, // Preserve AQNTL — don't let fermata corrupt it
+                    midiCursor: chord.lastIndex + 1,
+                    currentEventIndex: advancedIndex,
+                    lastAnchorTime: freshMatch.time,
+                    lastAnchorGlobalBeat: nextEvent.globalBeat,
+                    recentOutcomes: pushOutcome(state.recentOutcomes, 'match'),
+                    status: advancedIndex >= xmlEvents.length ? 'done' : 'running',
+                }
             }
         }
 
@@ -299,6 +383,18 @@ export function stepV5(
             if (nextBeatsElapsed <= 2) {
                 console.log(`[V5] ⏩ Dead-reckon M${xmlEvent.measure} B${xmlEvent.beat} → ${deadReckonTime.toFixed(3)}s (no onset, skipping)`)
 
+                // Track outcome and check for runaway
+                const outcomes = pushOutcome(state.recentOutcomes, 'dead-reckon')
+                if (isRunaway(outcomes)) {
+                    console.warn(`[V5] 🛑 Runaway detected (${outcomes.filter(o => o !== 'match').length}/10 bad). Pausing.`)
+                    return {
+                        ...state,
+                        recentOutcomes: outcomes,
+                        status: 'paused',
+                        ghostAnchor: { measure: xmlEvent.measure, beat: xmlEvent.beat, time: deadReckonTime },
+                    }
+                }
+
                 // Place the anchor via dead reckoning
                 const newAnchors = [...state.anchors]
                 const newBeatAnchors = [...state.beatAnchors]
@@ -311,6 +407,7 @@ export function stepV5(
                     anchors: newAnchors,
                     beatAnchors: newBeatAnchors,
                     ghostAnchor: null,
+                    recentOutcomes: outcomes,
                     currentEventIndex: nextIndex,
                     lastAnchorTime: deadReckonTime,
                     lastAnchorGlobalBeat: xmlEvent.globalBeat,

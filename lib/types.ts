@@ -59,6 +59,8 @@ export interface XMLEvent {
     pitches: number[]
     /** Smallest note duration in quarter-note fractions (1=quarter, 0.5=eighth, 0.25=16th, 0.125=32nd) */
     smallestDuration: number
+    /** Whether this beat has a fermata marking */
+    hasFermata?: boolean
 }
 
 /** Interactive V5 mapper state machine */
@@ -81,6 +83,8 @@ export interface V5MapperState {
     lastAnchorTime: number
     /** Global beat of last confirmed anchor */
     lastAnchorGlobalBeat: number
+    /** Recent event outcomes for runaway detection */
+    recentOutcomes: ('match' | 'dead-reckon' | 'stray')[]
 }
 
 /** A full song configuration (stored in DB) */
