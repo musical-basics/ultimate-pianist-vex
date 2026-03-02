@@ -141,6 +141,7 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
             const measureNumber = index + 1
             const sourceMeasure = instance.Sheet.SourceMeasures[index]
             const numerator = sourceMeasure?.ActiveTimeSignature ? sourceMeasure.ActiveTimeSignature.Numerator : 4
+            const denominator = sourceMeasure?.ActiveTimeSignature ? sourceMeasure.ActiveTimeSignature.Denominator : 4
 
             const beatPositions = new Map<number, number>()
             const uniqueFractionalBeats = new Set<number>()
@@ -197,7 +198,15 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
                             if (isRest) return;
 
                             const relX = entry.PositionAndShape.RelativePosition.x;
-                            let beatVal = 1 + ((staffMWidth > 0 ? relX / staffMWidth : 0) * numerator);
+                            let beatVal = 1;
+
+                            if (entry.sourceStaffEntry && entry.sourceStaffEntry.Timestamp) {
+                                // EXACT musical beat: Timestamp is in whole notes. Multiply by denominator (e.g., 4 for quarter notes).
+                                beatVal = 1 + (entry.sourceStaffEntry.Timestamp.RealValue * denominator);
+                            } else {
+                                // Fallback to visual approximation (causes B2.8 etc.)
+                                beatVal = 1 + ((staffMWidth > 0 ? relX / staffMWidth : 0) * numerator);
+                            }
                             beatVal = Math.round(beatVal * 1000) / 1000;
                             uniqueFractionalBeats.add(beatVal);
 
@@ -213,8 +222,9 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
                                 gve.notes.forEach((n: any) => {
                                     if (!n.sourceNote || !n.sourceNote.Pitch) return;
                                     const pitch = n.sourceNote.Pitch;
-                                    // Convert OSMD Pitch to MIDI number: (octave+1)*12 + halfTone
-                                    const midiPitch = (pitch.Octave + 1) * 12 + pitch.getHalfTone();
+                                    // Convert OSMD Pitch to MIDI number: (octave+2)*12 + halfTone
+                                    // OSMD octaves are 1 less than standard MIDI convention
+                                    const midiPitch = (pitch.Octave + 2) * 12 + pitch.getHalfTone();
                                     // Get note duration in quarter-note fractions
                                     const durQuarters = n.sourceNote.Length?.RealValue
                                         ? n.sourceNote.Length.RealValue * 4 // RealValue is in whole notes
