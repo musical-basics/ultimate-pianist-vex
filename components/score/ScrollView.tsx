@@ -5,7 +5,8 @@ import { useRef, useEffect, useCallback, useState, memo } from 'react'
 import { getPlaybackManager } from '@/lib/engine/PlaybackManager'
 import type { Anchor, BeatAnchor, XMLEvent } from '@/lib/types'
 import { useAppStore } from '@/lib/store'
-import { parseWithOsmd, type OsmdParseResult } from '@/lib/score/OsmdParser'
+import { parseWithOsmd } from '@/lib/score/OsmdParser'
+import { parseMusicXml } from '@/lib/score/MusicXmlParser'
 import type { IntermediateScore } from '@/lib/score/IntermediateScore'
 import { VexFlowRenderer, type NoteData, type VexFlowRenderResult } from './VexFlowRenderer'
 
@@ -55,7 +56,7 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
     const lastMeasureIndexRef = useRef<number>(-1)
     const prevRevealModeRef = useRef<'OFF' | 'NOTE' | 'CURTAIN'>('OFF')
 
-    // ─── OSMD Parsing State ────────────────────────────────────────
+    // ─── Parsing State ─────────────────────────────────────────────
     const [intermediateScore, setIntermediateScore] = useState<IntermediateScore | null>(null)
     const [isLoaded, setIsLoaded] = useState(false)
     const [parseError, setParseError] = useState<string | null>(null)
@@ -63,7 +64,7 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
     const totalMeasuresRef = useRef<number>(0)
     const systemYMapRef = useRef<{ top: number; height: number }>({ top: 20, height: 260 })
 
-    // ─── Parse MusicXML via headless OSMD ──────────────────────────
+    // ─── Parse MusicXML: direct parser for rendering, OSMD for xmlEvents
     useEffect(() => {
         if (!xmlUrl) return
 
@@ -73,16 +74,23 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
 
         const parse = async () => {
             try {
-                console.log('[ScrollView] Starting headless OSMD parse...')
-                const result: OsmdParseResult = await parseWithOsmd(xmlUrl)
+                // Run both parsers in parallel:
+                // 1. Direct MusicXML → IntermediateScore (accurate notes for VexFlow)
+                // 2. Headless OSMD → xmlEvents (preserved data contract for AutoMapper)
+                console.log('[ScrollView] Starting parallel parse: MusicXML + OSMD...')
+
+                const [score, osmdResult] = await Promise.all([
+                    parseMusicXml(xmlUrl),
+                    parseWithOsmd(xmlUrl),
+                ])
 
                 if (cancelled) return
 
-                xmlEventsRef.current = result.xmlEvents
-                totalMeasuresRef.current = result.totalMeasures
-                setIntermediateScore(result.intermediateScore)
+                xmlEventsRef.current = osmdResult.xmlEvents
+                totalMeasuresRef.current = osmdResult.totalMeasures
+                setIntermediateScore(score)
 
-                console.log(`[ScrollView] Parse complete: ${result.totalMeasures} measures, ${result.xmlEvents.length} XML events`)
+                console.log(`[ScrollView] Parse complete: ${score.measures.length} measures (MusicXML), ${osmdResult.xmlEvents.length} XML events (OSMD)`)
             } catch (err) {
                 if (!cancelled) {
                     const msg = err instanceof Error ? err.message : 'Failed to parse score'
