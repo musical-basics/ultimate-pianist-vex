@@ -17,45 +17,25 @@ import {
     Beam,
     StaveTie,
     Accidental,
-    Articulation,
     Dot,
     StaveConnector,
     type RenderContext,
     VoiceMode,
 } from 'vexflow'
-import type { IntermediateScore, IntermediateNote } from '@/lib/score/IntermediateScore'
+import type { IntermediateScore } from '@/lib/score/IntermediateScore'
+import {
+    STAVE_WIDTH, STAVE_Y_TREBLE, STAVE_SPACING, LEFT_MARGIN, SYSTEM_HEIGHT,
+    createStaveNote, isBeamable, addArticulation,
+    type NoteData, type VexFlowRenderResult,
+} from './VexFlowHelpers'
 
-// ─── Types ─────────────────────────────────────────────────────────
-
-export type NoteData = {
-    id: string
-    measureIndex: number
-    timestamp: number
-    element: HTMLElement | null
-    stemElement: HTMLElement | null
-}
-
-export interface VexFlowRenderResult {
-    measureXMap: Map<number, number>
-    beatXMap: Map<number, Map<number, number>>
-    noteMap: Map<number, NoteData[]>
-    systemYMap: { top: number; height: number }
-    measureCount: number
-}
+export type { NoteData, VexFlowRenderResult }
 
 interface VexFlowRendererProps {
     score: IntermediateScore | null
     onRenderComplete?: (result: VexFlowRenderResult) => void
     darkMode?: boolean
 }
-
-// ─── Constants ─────────────────────────────────────────────────────
-
-const STAVE_WIDTH = 250           // px per measure
-const STAVE_Y_TREBLE = 40        // Y offset for treble stave
-const STAVE_SPACING = 120        // vertical space between treble and bass
-const LEFT_MARGIN = 20           // px left margin
-const SYSTEM_HEIGHT = 300        // total height for a grand staff system
 
 // ─── Component ─────────────────────────────────────────────────────
 
@@ -217,7 +197,7 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                         if (note.dots > 0) Dot.buildAndAttach([staveNote], { all: true })
 
                         for (const artCode of note.articulations) {
-                            staveNote.addModifier(new Articulation(artCode))
+                            addArticulation(staveNote, artCode)
                         }
 
                         staveNote.setAttribute('id', note.vfId)
@@ -404,24 +384,6 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
     )
 }
 
-// ─── Helpers ───────────────────────────────────────────────────────
-
-function createStaveNote(note: IntermediateNote, staffIndex: number): StaveNote {
-    const clef = staffIndex === 0 ? 'treble' : 'bass'
-
-    return new StaveNote({
-        keys: note.keys,
-        duration: note.duration,
-        clef,
-        autoStem: true,
-    })
-}
-
-function isBeamable(duration: string): boolean {
-    // Beamable if 8th note or shorter (strip rest/dot suffixes)
-    const baseDur = duration.replace(/[rd]/g, '')
-    return ['8', '16', '32', '64'].includes(baseDur)
-}
-
 export const VexFlowRenderer = React.memo(VexFlowRendererComponent)
 export default VexFlowRenderer
+
