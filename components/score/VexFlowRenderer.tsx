@@ -288,9 +288,19 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                 }
             }
 
-            // ── THIS IS THE FIX: Format all voices simultaneously ──
+            // ── Format: joinVoices per-stave, format all together ──
             if (vfVoices.length > 0) {
-                new Formatter().joinVoices(vfVoices).format(vfVoices, STAVE_WIDTH - 40)
+                const formatter = new Formatter()
+                // Group voices by stave for joinVoices (collision handling within a stave)
+                const voicesByStave = new Map<Stave, Voice[]>()
+                vfVoices.forEach(v => {
+                    const stave = voiceStaveMap.get(v)!
+                    if (!voicesByStave.has(stave)) voicesByStave.set(stave, [])
+                    voicesByStave.get(stave)!.push(v)
+                })
+                voicesByStave.forEach(voices => formatter.joinVoices(voices))
+                // Format all voices together for cross-stave X alignment
+                formatter.format(vfVoices, STAVE_WIDTH - 40)
                 vfVoices.forEach(v => v.draw(context, voiceStaveMap.get(v)!))
                 measureBeams.forEach(b => b.setContext(context).draw())
             }
