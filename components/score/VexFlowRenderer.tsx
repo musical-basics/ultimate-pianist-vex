@@ -53,9 +53,9 @@ interface VexFlowRendererProps {
 
 const STAVE_WIDTH = 250           // px per measure
 const STAVE_Y_TREBLE = 40        // Y offset for treble stave
-const STAVE_SPACING = 80         // vertical space between treble and bass
+const STAVE_SPACING = 120        // vertical space between treble and bass
 const LEFT_MARGIN = 20           // px left margin
-const SYSTEM_HEIGHT = 260        // total height for a grand staff system
+const SYSTEM_HEIGHT = 300        // total height for a grand staff system
 
 // ─── Component ─────────────────────────────────────────────────────
 
