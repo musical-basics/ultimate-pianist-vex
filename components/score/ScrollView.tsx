@@ -462,7 +462,7 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
                     darkMode={darkMode}
                 />
 
-                <div ref={cursorRef} className="absolute pointer-events-none transition-none z-[1000]" style={{ display: 'none' }} />
+                <div ref={cursorRef} className="absolute pointer-events-none z-[1000]" style={{ display: 'none', width: '2px', backgroundColor: '#10B981', borderRadius: '1px', opacity: 0.85, transition: 'transform 0.05s linear' }} />
                 <div ref={curtainRef} className="absolute pointer-events-none z-[999]" style={{ display: 'none', top: 0, bottom: 0 }} />
 
                 {isAdmin && anchors.map(anchor => {
