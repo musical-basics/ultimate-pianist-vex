@@ -186,10 +186,15 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
 
             const measureNoteData: NoteData[] = []
             const measureBeatPositions = new Map<number, number>()
-
-            // Track notes that need ties from this measure
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const currentMeasureFirstNotes: Map<string, { staveNote: any; keyIndex: number }> = new Map()
+
+            // Collections for synchronous formatting
+            const vfVoices: Voice[] = []
+            const voiceStaveMap = new Map<Voice, Stave>()
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const measureBeams: any[] = []
+            const coordinateExtractors: (() => void)[] = []
 
             for (const staff of measure.staves) {
                 const stave = staveMap[staff.staffIndex]
@@ -198,53 +203,37 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                 for (const voice of staff.voices) {
                     if (voice.notes.length === 0) continue
 
-                    // Build StaveNotes
                     const vfNotes: StaveNote[] = []
                     const beamableNotes: StaveNote[] = []
 
                     for (const note of voice.notes) {
                         const staveNote = createStaveNote(note, staff.staffIndex)
 
-                        // Apply accidentals
                         for (let ki = 0; ki < note.accidentals.length; ki++) {
                             const acc = note.accidentals[ki]
-                            if (acc) {
-                                staveNote.addModifier(new Accidental(acc), ki)
-                            }
+                            if (acc) staveNote.addModifier(new Accidental(acc), ki)
                         }
 
-                        // Apply dots
-                        if (note.dots > 0) {
-                            Dot.buildAndAttach([staveNote], { all: true })
-                        }
+                        if (note.dots > 0) Dot.buildAndAttach([staveNote], { all: true })
 
-                        // Apply articulations
                         for (const artCode of note.articulations) {
                             staveNote.addModifier(new Articulation(artCode))
                         }
 
-                        // Set the custom ID for DOM mapping
                         staveNote.setAttribute('id', note.vfId)
-
                         vfNotes.push(staveNote)
 
-                        // Collect beamable notes (8th and shorter, not rests)
                         if (!note.isRest && isBeamable(note.duration)) {
                             beamableNotes.push(staveNote)
                         }
 
-                        // Track for ties — current measure first notes by key
+                        // Tie tracking
                         if (!note.isRest) {
                             for (let ki = 0; ki < note.keys.length; ki++) {
                                 const tieKey = `${staff.staffIndex}-${note.keys[ki]}`
                                 if (!currentMeasureFirstNotes.has(tieKey)) {
                                     currentMeasureFirstNotes.set(tieKey, { staveNote, keyIndex: ki })
                                 }
-                            }
-
-                            // Check for cross-measure ties from previous measure
-                            for (let ki = 0; ki < note.keys.length; ki++) {
-                                const tieKey = `${staff.staffIndex}-${note.keys[ki]}`
                                 const prev = prevMeasureLastNotes.get(tieKey)
                                 if (prev) {
                                     tieRequests.push({
@@ -256,10 +245,6 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                                     prevMeasureLastNotes.delete(tieKey)
                                 }
                             }
-                        }
-
-                        // Track tie-to-next for this note
-                        if (!note.isRest) {
                             for (let ki = 0; ki < note.tiesToNext.length; ki++) {
                                 if (note.tiesToNext[ki]) {
                                     const tieKey = `${staff.staffIndex}-${note.keys[ki]}`
@@ -267,29 +252,21 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                                 }
                             }
                         }
-                    }
 
-                    // Create Voice
-                    const vfVoice = new Voice({
-                        numBeats: currentTimeSigNum,
-                        beatValue: currentTimeSigDen,
-                    }).setMode(VoiceMode.SOFT)
-
-                    vfVoice.addTickables(vfNotes)
-
-                    // Format
-                    new Formatter().joinVoices([vfVoice]).format([vfVoice], STAVE_WIDTH - 40)
-
-                    // Draw
-                    vfVoice.draw(context, stave)
-
-                    // Beaming — generate beams for groups of beamable notes
-                    if (beamableNotes.length >= 2) {
-                        try {
-                            const beams = Beam.generateBeams(beamableNotes)
-                            beams.forEach(beam => beam.setContext(context).draw())
-                        } catch {
-                            // Beaming may fail for unusual note groupings — skip silently
+                        // DELAY coordinate extraction until after the master Formatter runs
+                        if (!note.isRest) {
+                            coordinateExtractors.push(() => {
+                                try {
+                                    measureBeatPositions.set(note.beat, staveNote.getAbsoluteX())
+                                } catch { /* ignore */ }
+                                measureNoteData.push({
+                                    id: note.vfId,
+                                    measureIndex: measureNumber,
+                                    timestamp: (note.beat - 1) / currentTimeSigNum,
+                                    element: null,
+                                    stemElement: null,
+                                })
+                            })
                         }
                     }
 
@@ -299,10 +276,8 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                         if (note.isRest) continue
                         for (let ki = 0; ki < note.tiesToNext.length; ki++) {
                             if (note.tiesToNext[ki] && ni + 1 < vfNotes.length) {
-                                // Check if next note is in the same measure
                                 const nextNote = voice.notes[ni + 1]
                                 if (nextNote && !nextNote.isRest) {
-                                    // Find matching key index in next note
                                     const matchIdx = nextNote.keys.indexOf(note.keys[ki])
                                     if (matchIdx >= 0) {
                                         tieRequests.push({
@@ -311,40 +286,37 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                                             firstIndices: [ki],
                                             lastIndices: [matchIdx],
                                         })
-                                        // Remove from cross-measure tracking since it was resolved within measure
-                                        const tieKey = `${staff.staffIndex}-${note.keys[ki]}`
-                                        prevMeasureLastNotes.delete(tieKey)
+                                        prevMeasureLastNotes.delete(`${staff.staffIndex}-${note.keys[ki]}`)
                                     }
                                 }
                             }
                         }
                     }
 
-                    // Collect beat positions and note data from rendered notes
-                    for (let ni = 0; ni < voice.notes.length; ni++) {
-                        const intNote = voice.notes[ni]
-                        const vfNote = vfNotes[ni]
+                    const vfVoice = new Voice({
+                        numBeats: currentTimeSigNum,
+                        beatValue: currentTimeSigDen,
+                    }).setMode(VoiceMode.SOFT)
 
-                        if (!intNote.isRest) {
-                            try {
-                                const noteX = vfNote.getAbsoluteX()
-                                measureBeatPositions.set(intNote.beat, noteX)
-                            } catch { /* some notes may not have position yet */ }
-                        }
+                    vfVoice.addTickables(vfNotes)
+                    vfVoices.push(vfVoice)
+                    voiceStaveMap.set(vfVoice, stave)
 
-                        // Build NoteData for DOM effects
-                        if (!intNote.isRest) {
-                            measureNoteData.push({
-                                id: intNote.vfId,
-                                measureIndex: measureNumber,
-                                timestamp: (intNote.beat - 1) / currentTimeSigNum,
-                                element: null, // will be populated after DOM is ready
-                                stemElement: null,
-                            })
-                        }
+                    if (beamableNotes.length >= 2) {
+                        try { measureBeams.push(...Beam.generateBeams(beamableNotes)) } catch { /* ignore */ }
                     }
                 }
             }
+
+            // ── THIS IS THE FIX: Format all voices simultaneously ──
+            if (vfVoices.length > 0) {
+                new Formatter().joinVoices(vfVoices).format(vfVoices, STAVE_WIDTH - 40)
+                vfVoices.forEach(v => v.draw(context, voiceStaveMap.get(v)!))
+                measureBeams.forEach(b => b.setContext(context).draw())
+            }
+
+            // Extract accurate coordinates now that formatting is complete
+            coordinateExtractors.forEach(extract => extract())
 
             beatXMap.set(measureNumber, measureBeatPositions)
             allNoteData.set(measureNumber, measureNoteData)

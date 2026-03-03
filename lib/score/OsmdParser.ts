@@ -82,16 +82,15 @@ function realValueToDuration(realValue: number): { duration: string; dots: numbe
 function pitchToVexFlowKey(pitch: OsmdAny): { key: string; accidental: string | null } {
     try {
         const fund: number = pitch.FundamentalNote       // 0-6 enum
-        const octave: number = pitch.Octave              // OSMD octave (needs +3 for VexFlow)
         const accValue: number = pitch.Accidental || 0   // AccidentalEnum
 
-        const letter = FUNDAMENTAL_TO_LETTER[fund] || 'c'
-        const vfOctave = octave + 3  // OSMD octave 1 = VexFlow octave 4 for middle C
-        const accStr = ACCIDENTAL_TO_VF[accValue] ?? ''
+        // Bulletproof octave calculation via exact MIDI pitch
+        const midiPitch = pitchToMidi(pitch)
+        const trueOctave = Math.floor(midiPitch / 12) - 1
 
-        // VexFlow key format: "c#/4" or "eb/5"
-        const key = `${letter}${accStr}/${vfOctave}`
-        // Only return explicit accidental if non-empty
+        const letter = FUNDAMENTAL_TO_LETTER[fund] || 'c'
+        const accStr = ACCIDENTAL_TO_VF[accValue] ?? ''
+        const key = `${letter}${accStr}/${trueOctave}`
         const accidental = accStr || null
 
         return { key, accidental }
@@ -467,15 +466,25 @@ function buildIntermediateScore(osmd: OSMD): IntermediateScore {
                 voices.push({ voiceIndex: voiceIdx, notes })
             })
 
-            // If no voices found, create a whole rest for the measure
+            // If no voices found, create a padded rest for the measure
             if (voices.length === 0) {
                 const restKey = (prevClefs[sIdx] === 'bass') ? 'd/3' : 'b/4'
+                let restDur = 'wr'
+                let restDots = 0
+
+                const num = prevNumerator || 4
+                const den = prevDenominator || 4
+
+                if (num === 3 && den === 4) { restDur = 'hr'; restDots = 1 }
+                else if (num === 2 && den === 4) { restDur = 'hr' }
+                else if (num === 6 && den === 8) { restDur = 'hr'; restDots = 1 }
+
                 voices.push({
                     voiceIndex: 0,
                     notes: [{
                         keys: [restKey],
-                        duration: 'wr',
-                        dots: 0,
+                        duration: restDur + (restDots ? 'd' : ''),
+                        dots: restDots,
                         isRest: true,
                         accidentals: [null],
                         tiesToNext: [false],
