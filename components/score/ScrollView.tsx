@@ -589,6 +589,15 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
                 const defaultColor = darkMode ? '#e0e0e0' : '#000000'
                 const highlightColor = '#10B981'; const shadowColor = '#10B981'
 
+                // DEBUG: Log effect state periodically
+                if (Math.random() < 0.005) {
+                    const activeCount = notesInMeasure.filter(n => {
+                        const noteEnd = n.timestamp + 0.01
+                        return globalProgress <= noteEnd && globalProgress >= n.timestamp - 0.04
+                    }).length
+                    console.log(`[EFFECTS DEBUG] M${measure} B${beat} | progress=${progress.toFixed(3)} globalProgress=${globalProgress.toFixed(3)} | notes=${notesInMeasure.length} active=${activeCount} | highlight=${highlightNote} jump=${jumpEffect} pop=${popEffect} glow=${glowEffect}`)
+                }
+
                 notesInMeasure.forEach(note => {
                     if (!note.element) return
                     const lookahead = 0.04
