@@ -2,10 +2,12 @@
 
 import * as React from 'react'
 import { useRef, useEffect, useCallback, useState, memo } from 'react'
-import { useOSMD } from '@/hooks/useOSMD'
 import { getPlaybackManager } from '@/lib/engine/PlaybackManager'
 import type { Anchor, BeatAnchor, XMLEvent } from '@/lib/types'
 import { useAppStore } from '@/lib/store'
+import { parseWithOsmd, type OsmdParseResult } from '@/lib/score/OsmdParser'
+import type { IntermediateScore } from '@/lib/score/IntermediateScore'
+import { VexFlowRenderer, type NoteData, type VexFlowRenderResult } from './VexFlowRenderer'
 
 interface ScrollViewProps {
     xmlUrl: string | null
@@ -30,14 +32,6 @@ interface ScrollViewProps {
     onScoreLoaded?: (totalMeasures: number, noteCounts: Map<number, number>, xmlEvents?: XMLEvent[]) => void
 }
 
-type NoteData = {
-    id: string
-    measureIndex: number
-    timestamp: number
-    element: HTMLElement | null
-    stemElement: HTMLElement | null
-}
-
 const ScrollViewComponent: React.FC<ScrollViewProps> = ({
     xmlUrl, anchors, beatAnchors = [], isPlaying, isAdmin = false, darkMode = false,
     revealMode = 'OFF', highlightNote = true, glowEffect = true, popEffect = false, jumpEffect = true,
@@ -45,12 +39,10 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
     onMeasureChange, onUpdateAnchor, onUpdateBeatAnchor, onScoreLoaded
 }) => {
     const containerRef = useRef<HTMLDivElement>(null)
-    const osmdContainerRef = useRef<HTMLDivElement>(null)
     const cursorRef = useRef<HTMLDivElement>(null)
     const curtainRef = useRef<HTMLDivElement>(null)
     const scrollContainerRef = useRef<HTMLDivElement>(null)
 
-    const { osmd, isLoaded, error } = useOSMD(osmdContainerRef, xmlUrl)
     const animationFrameRef = useRef<number>(0)
 
     const [measureXMap, setMeasureXMap] = useState<Map<number, number>>(new Map())
@@ -63,6 +55,115 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
     const lastMeasureIndexRef = useRef<number>(-1)
     const prevRevealModeRef = useRef<'OFF' | 'NOTE' | 'CURTAIN'>('OFF')
 
+    // ─── OSMD Parsing State ────────────────────────────────────────
+    const [intermediateScore, setIntermediateScore] = useState<IntermediateScore | null>(null)
+    const [isLoaded, setIsLoaded] = useState(false)
+    const [parseError, setParseError] = useState<string | null>(null)
+    const xmlEventsRef = useRef<XMLEvent[]>([])
+    const totalMeasuresRef = useRef<number>(0)
+    const systemYMapRef = useRef<{ top: number; height: number }>({ top: 20, height: 260 })
+
+    // ─── Parse MusicXML via headless OSMD ──────────────────────────
+    useEffect(() => {
+        if (!xmlUrl) return
+
+        let cancelled = false
+        setIsLoaded(false)
+        setParseError(null)
+
+        const parse = async () => {
+            try {
+                console.log('[ScrollView] Starting headless OSMD parse...')
+                const result: OsmdParseResult = await parseWithOsmd(xmlUrl)
+
+                if (cancelled) return
+
+                xmlEventsRef.current = result.xmlEvents
+                totalMeasuresRef.current = result.totalMeasures
+                setIntermediateScore(result.intermediateScore)
+
+                console.log(`[ScrollView] Parse complete: ${result.totalMeasures} measures, ${result.xmlEvents.length} XML events`)
+            } catch (err) {
+                if (!cancelled) {
+                    const msg = err instanceof Error ? err.message : 'Failed to parse score'
+                    setParseError(msg)
+                    console.error('[ScrollView] Parse error:', msg)
+                }
+            }
+        }
+
+        parse()
+        return () => { cancelled = true }
+    }, [xmlUrl])
+
+    // ─── VexFlowRenderer completion callback ───────────────────────
+    const handleRenderComplete = useCallback((result: VexFlowRenderResult) => {
+        setMeasureXMap(result.measureXMap)
+        beatXMapRef.current = result.beatXMap
+        noteMap.current = result.noteMap
+        systemYMapRef.current = result.systemYMap
+
+        // Build measureContentMap and allSymbols from the rendered SVG
+        const newMeasureContentMap = new Map<number, HTMLElement[]>()
+        const newStaffLines: HTMLElement[] = []
+        const newAllSymbols: HTMLElement[] = []
+
+        if (containerRef.current) {
+            // Compute measure bounds from measureXMap
+            const measureBounds: { index: number; left: number; right: number }[] = []
+            const sortedMeasures = Array.from(result.measureXMap.entries()).sort((a, b) => a[0] - b[0])
+            for (let i = 0; i < sortedMeasures.length; i++) {
+                const [mNum, mX] = sortedMeasures[i]
+                const nextX = (i + 1 < sortedMeasures.length) ? sortedMeasures[i + 1][1] : mX + 250
+                measureBounds.push({ index: mNum, left: mX - 5, right: nextX + 5 })
+            }
+
+            const allElements = containerRef.current.querySelectorAll('svg path, svg rect, svg text')
+            const containerLeft = containerRef.current.getBoundingClientRect().left
+            for (let i = 0; i < allElements.length; i++) {
+                const el = allElements[i] as HTMLElement
+                const rect = el.getBoundingClientRect()
+                const cl = el.classList
+                const isMusical = cl.contains('vf-stavenote') || cl.contains('vf-beam') ||
+                    cl.contains('vf-rest') || cl.contains('vf-clef') ||
+                    cl.contains('vf-keysignature') || cl.contains('vf-timesignature') ||
+                    cl.contains('vf-stem') || cl.contains('vf-modifier') ||
+                    el.closest('.vf-stavenote, .vf-beam, .vf-rest, .vf-clef, .vf-keysignature, .vf-timesignature, .vf-stem, .vf-modifier') !== null
+
+                if (!isMusical && rect.width > 50 && rect.height < 3) {
+                    newStaffLines.push(el)
+                    continue
+                }
+                newAllSymbols.push(el)
+
+                const elCenterX = (rect.left - containerLeft) + (rect.width / 2)
+                const match = measureBounds.find(b => elCenterX >= b.left && elCenterX <= b.right)
+                if (match) {
+                    if (!newMeasureContentMap.has(match.index)) newMeasureContentMap.set(match.index, [])
+                    newMeasureContentMap.get(match.index)!.push(el)
+                }
+            }
+        }
+
+        measureContentMap.current = newMeasureContentMap
+        staffLinesRef.current = newStaffLines
+        allSymbolsRef.current = newAllSymbols
+        lastMeasureIndexRef.current = -1
+
+        setIsLoaded(true)
+
+        // Fire onScoreLoaded with the preserved xmlEvents
+        if (onScoreLoaded) {
+            const counts = new Map<number, number>()
+            result.noteMap.forEach((notes, measureIndex) => {
+                counts.set(measureIndex, notes.length)
+            })
+            console.log(`[ScrollView VexFlow] Exported ${xmlEventsRef.current.length} exact XML note events for mapping.`)
+            onScoreLoaded(result.measureCount, counts, xmlEventsRef.current)
+        }
+    }, [onScoreLoaded])
+
+    // ─── Position Finding (unchanged from original) ────────────────
     const findCurrentPosition = useCallback((time: number) => {
         if (!beatAnchors || beatAnchors.length === 0) {
             if (anchors.length === 0) return { measure: 1, beat: 1, progress: 0, isBeatInterpolation: false }
@@ -109,6 +210,7 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
         }
     }, [anchors, beatAnchors])
 
+    // ─── Color Application (unchanged) ─────────────────────────────
     const applyColor = (element: HTMLElement, color: string) => {
         if (!element) return
         Array.from(element.getElementsByTagName('path')).forEach(p => { p.style.fill = color; p.style.stroke = color; p.setAttribute('fill', color); p.setAttribute('stroke', color) })
@@ -116,335 +218,7 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
         element.style.fill = color; element.style.stroke = color
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const calculateNoteMap = useCallback(() => {
-        const instance = osmd.current
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        if (!instance || !(instance as any).GraphicSheet || !containerRef.current) return
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const measureList = (instance as any).GraphicSheet.MeasureList
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const unitInPixels = (instance as any).GraphicSheet.UnitInPixels || 10
-
-        const newNoteMap = new Map<number, NoteData[]>()
-        const newMeasureContentMap = new Map<number, HTMLElement[]>()
-        const newAllSymbols: HTMLElement[] = []
-        const newStaffLines: HTMLElement[] = []
-        const newMeasureXMap = new Map<number, number>()
-        const newBeatXMap = new Map<number, Map<number, number>>()
-
-        const xmlEventsList: XMLEvent[] = []
-        let cumulativeBeats = 0 // Running global beat counter for V5
-
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        measureList.forEach((staves: any[], index: number) => {
-            const measureNumber = index + 1
-            const sourceMeasure = instance.Sheet.SourceMeasures[index]
-            const numerator = sourceMeasure?.ActiveTimeSignature ? sourceMeasure.ActiveTimeSignature.Numerator : 4
-            const denominator = sourceMeasure?.ActiveTimeSignature ? sourceMeasure.ActiveTimeSignature.Denominator : 4
-
-            const beatPositions = new Map<number, number>()
-            const uniqueFractionalBeats = new Set<number>()
-            // V5: per-beat accumulator for pitches and smallest duration
-            const beatAccumulator = new Map<number, { pitches: Set<number>, smallestDur: number, hasFermata: boolean }>()
-
-            if (staves.length > 0) {
-                const pos = staves[0].PositionAndShape
-                const absoluteX = (pos.AbsolutePosition.x + pos.BorderLeft) * unitInPixels
-                newMeasureXMap.set(measureNumber, absoluteX)
-
-                const mStart = (pos.AbsolutePosition.x + pos.BorderLeft) * unitInPixels
-                const mEnd = (pos.AbsolutePosition.x + pos.BorderRight) * unitInPixels
-                const mWidth = mEnd - mStart
-
-                try {
-                    // Fallback integer beats (linear spread)
-                    for (let b = 1; b <= numerator; b++) {
-                        const targetFraction = (b - 1) / numerator
-                        let bestX = mStart + (mWidth * targetFraction)
-
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        staves.forEach((staffMeasure: any) => {
-                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                            staffMeasure.staffEntries.forEach((entry: any) => {
-                                const relX = entry.PositionAndShape.RelativePosition.x * unitInPixels
-                                const linearX = mStart + (mWidth * targetFraction)
-                                const actualEntryX = (staffMeasure.PositionAndShape.AbsolutePosition.x * unitInPixels) + relX
-                                if (Math.abs(actualEntryX - linearX) < (mWidth / numerator) * 0.4) {
-                                    bestX = actualEntryX
-                                }
-                            })
-                        })
-                        beatPositions.set(b, bestX)
-                    }
-
-                    // Explicit fractional beats derived exactly from XML notes
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    staves.forEach((staffMeasure: any) => {
-                        const staffMWidth = staffMeasure.PositionAndShape.BorderRight - staffMeasure.PositionAndShape.BorderLeft;
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        staffMeasure.staffEntries.forEach((entry: any) => {
-                            // Verify it's a real note, not a rest
-                            let isRest = true;
-                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                            entry.graphicalVoiceEntries?.forEach((gve: any) => {
-                                if (gve.notes) {
-                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                    gve.notes.forEach((n: any) => {
-                                        if (n.sourceNote && n.sourceNote.Pitch) isRest = false;
-                                    });
-                                }
-                            });
-                            if (isRest) return;
-
-                            const relX = entry.PositionAndShape.RelativePosition.x;
-                            let beatVal = 1;
-
-                            if (entry.sourceStaffEntry && entry.sourceStaffEntry.Timestamp) {
-                                // EXACT musical beat: Timestamp is in whole notes. Multiply by denominator (e.g., 4 for quarter notes).
-                                beatVal = 1 + (entry.sourceStaffEntry.Timestamp.RealValue * denominator);
-                            } else {
-                                // Fallback to visual approximation (causes B2.8 etc.)
-                                beatVal = 1 + ((staffMWidth > 0 ? relX / staffMWidth : 0) * numerator);
-                            }
-                            beatVal = Math.round(beatVal * 1000) / 1000;
-                            uniqueFractionalBeats.add(beatVal);
-
-                            const absX = (staffMeasure.PositionAndShape.AbsolutePosition.x + relX) * unitInPixels;
-                            // Map the exact fractional beat directly to the pixel coordinates!
-                            beatPositions.set(beatVal, absX);
-
-                            // V5: Collect pitches and note lengths per beat position
-                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                            entry.graphicalVoiceEntries?.forEach((gve: any) => {
-                                if (!gve.notes) return;
-                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                gve.notes.forEach((n: any) => {
-                                    if (!n.sourceNote || !n.sourceNote.Pitch) return;
-                                    const pitch = n.sourceNote.Pitch;
-
-                                    // BULLETPROOF: Convert OSMD pitch to MIDI via frequency
-                                    // This bypasses all undocumented octave/accidental conventions
-                                    let midiPitch = 60; // fallback to middle C
-                                    try {
-                                        const freq = pitch.Frequency || pitch.frequency;
-                                        if (freq && freq > 0) {
-                                            midiPitch = Math.round(12 * Math.log2(freq / 440) + 69);
-                                        } else {
-                                            // Fallback: try getHalfTone + 12
-                                            midiPitch = pitch.getHalfTone() + 12;
-                                        }
-                                    } catch {
-                                        // Last resort fallback
-                                        try { midiPitch = pitch.getHalfTone() + 12; } catch { /* give up */ }
-                                    }
-
-                                    // SAFE verbose logging (each access individually protected)
-                                    if (measureNumber <= 3) {
-                                        try {
-                                            const info: Record<string, unknown> = {};
-                                            try { info.fund = pitch.FundamentalNote; } catch { info.fund = '?'; }
-                                            try { info.oct = pitch.Octave; } catch { info.oct = '?'; }
-                                            try { info.acc = pitch.Accidental; } catch { info.acc = '?'; }
-                                            try { info.accHT = pitch.AccidentalHalfTones; } catch { info.accHT = '?'; }
-                                            try { info.ht = pitch.getHalfTone(); } catch { info.ht = '?'; }
-                                            try { info.freq = pitch.Frequency; } catch { info.freq = '?'; }
-                                            try { info.str = pitch.ToStringShort(); } catch { info.str = '?'; }
-                                            console.log(`[PITCH] M${measureNumber} B${beatVal}: MIDI=${midiPitch}`, JSON.stringify(info));
-                                        } catch { /* ignore logging errors */ }
-                                    }
-
-                                    // Get note duration in quarter-note fractions
-                                    const durQuarters = n.sourceNote.Length?.RealValue
-                                        ? n.sourceNote.Length.RealValue * 4 // RealValue is in whole notes
-                                        : 1; // default to quarter note
-
-                                    if (!beatAccumulator.has(beatVal)) {
-                                        beatAccumulator.set(beatVal, { pitches: new Set(), smallestDur: durQuarters, hasFermata: false });
-                                    }
-                                    const acc = beatAccumulator.get(beatVal)!;
-                                    acc.pitches.add(midiPitch);
-                                    if (durQuarters < acc.smallestDur) acc.smallestDur = durQuarters;
-
-                                    // Check for fermata in articulations
-                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                    try {
-                                        const ve = n.sourceNote?.ParentVoiceEntry;
-                                        // VERBOSE: Log all articulations for fermata-relevant measures
-                                        if (measureNumber >= 17 && measureNumber <= 19 && ve) {
-                                            const arts = ve.Articulations;
-                                            if (arts && arts.length > 0) {
-                                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                                const artDetails = arts.map((a: any) => {
-                                                    const info: Record<string, unknown> = {};
-                                                    try { info.enum = a.articulationEnum; } catch { info.enum = '?'; }
-                                                    try { info.type = typeof a.articulationEnum; } catch { }
-                                                    try { info.keys = Object.keys(a).join(','); } catch { }
-                                                    return JSON.stringify(info);
-                                                });
-                                                console.log(`[FERMATA DEBUG] M${measureNumber} B${beatVal}: ${arts.length} articulation(s): [${artDetails.join('; ')}]`);
-                                            }
-                                        }
-                                        if (ve?.Articulations) {
-                                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                            ve.Articulations.forEach((art: any) => {
-                                                // ArticulationEnum: fermata=10, invertedfermata=11
-                                                if (art.articulationEnum === 10 || art.articulationEnum === 11) {
-                                                    acc.hasFermata = true;
-                                                    console.log(`[FERMATA] ✓ Detected fermata at M${measureNumber} B${beatVal}`);
-                                                }
-                                            });
-                                        }
-                                    } catch (err) {
-                                        if (measureNumber >= 17 && measureNumber <= 19) {
-                                            console.error(`[FERMATA DEBUG] Error at M${measureNumber} B${beatVal}:`, err);
-                                        }
-                                    }
-                                });
-                            });
-                        });
-                    });
-
-                    newBeatXMap.set(measureNumber, beatPositions)
-
-                    // Build chronological XML Events List with V5 enrichment
-                    const sortedBeats = Array.from(uniqueFractionalBeats).sort((a, b) => a - b);
-                    sortedBeats.forEach(b => {
-                        const acc = beatAccumulator.get(b);
-                        const pitchArr = acc ? Array.from(acc.pitches) : [];
-                        xmlEventsList.push({
-                            measure: measureNumber,
-                            beat: b,
-                            globalBeat: cumulativeBeats + (b - 1), // beat 1 of measure = cumulativeBeats + 0
-                            pitches: pitchArr,
-                            smallestDuration: acc ? acc.smallestDur : 1,
-                            hasFermata: acc ? acc.hasFermata : false,
-                        });
-
-                        // VERBOSE: Log the final XML event
-                        if (measureNumber <= 3) {
-                            console.log(`[ScrollView EVENT] M${measureNumber} B${b}: pitches=[${pitchArr.join(',')}] globalBeat=${cumulativeBeats + (b - 1)}`);
-                        }
-                    });
-
-                } catch { /* ignore */ }
-            }
-
-            // V5: advance cumulative beat counter by this measure's beat count
-            cumulativeBeats += numerator
-
-            const measureNotes: NoteData[] = []
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            staves.forEach((staffMeasure: any) => {
-                const measurePos = staffMeasure.PositionAndShape
-                const measureWidth = (measurePos.BorderRight - measurePos.BorderLeft) * unitInPixels
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                staffMeasure.staffEntries.forEach((entry: any) => {
-                    if (!entry.graphicalVoiceEntries) return
-                    const relX = entry.PositionAndShape.RelativePosition.x * unitInPixels
-                    const relativeTimestamp = measureWidth > 0 ? relX / measureWidth : 0
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    entry.graphicalVoiceEntries.forEach((gve: any) => {
-                        if (!gve.notes) return
-                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                        gve.notes.forEach((note: any) => {
-                            // Foolproof rest check: OSMD rests do not have a Pitch defined. 
-                            if (note.sourceNote && !note.sourceNote.Pitch) return
-
-                            if (note.vfnote && note.vfnote.length > 0) {
-                                const vfId = note.vfnote[0].attrs?.id
-                                if (vfId) {
-                                    const element = document.getElementById(vfId) || document.getElementById(`vf-${vfId}`)
-                                    if (element) {
-                                        // Ignore anything that is a rest
-                                        if (element.classList.contains('vf-rest') || element.closest('.vf-rest')) return
-
-                                        const group = element.closest('.vf-stavenote') as HTMLElement || element as HTMLElement
-                                        group.querySelectorAll('path, rect').forEach(p => {
-                                            const el = p as HTMLElement
-                                            el.style.transformBox = 'fill-box'
-                                            el.style.transformOrigin = 'center'
-                                            el.style.transition = 'transform 0.1s ease-out, fill 0.1s, stroke 0.1s'
-                                        })
-                                        measureNotes.push({ id: vfId, measureIndex: measureNumber, timestamp: relativeTimestamp, element: group, stemElement: null })
-                                    }
-                                }
-                            }
-                        })
-                    })
-                })
-            })
-            // Always set the measure even if 0 notes, so we don't accidentally get noteCounts.size === 0 for a fully blank score (though rare)
-            newNoteMap.set(measureNumber, measureNotes)
-        })
-
-        const measureBounds: { index: number, left: number, right: number }[] = []
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        measureList.forEach((staves: any[], index: number) => {
-            let minX = Number.MAX_VALUE, maxX = Number.MIN_VALUE
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            staves.forEach((staff: any) => {
-                const pos = staff.PositionAndShape
-                const absX = pos.AbsolutePosition.x
-                if (absX + pos.BorderLeft < minX) minX = absX + pos.BorderLeft
-                if (absX + pos.BorderRight > maxX) maxX = absX + pos.BorderRight
-            })
-            if (minX < Number.MAX_VALUE) {
-                measureBounds.push({ index: index + 1, left: (minX * unitInPixels) - 5, right: (maxX * unitInPixels) + 5 })
-            }
-        })
-
-        const allElements = containerRef.current.querySelectorAll('svg path, svg rect, svg text')
-        const containerLeft = containerRef.current.getBoundingClientRect().left
-        for (let i = 0; i < allElements.length; i++) {
-            const el = allElements[i] as HTMLElement
-            const rect = el.getBoundingClientRect()
-            const cl = el.classList
-            const isMusical = cl.contains('vf-stavenote') || cl.contains('vf-beam') || cl.contains('vf-rest') || cl.contains('vf-clef') || cl.contains('vf-keysignature') || cl.contains('vf-timesignature') || cl.contains('vf-stem') || cl.contains('vf-modifier') || el.closest('.vf-stavenote, .vf-beam, .vf-rest, .vf-clef, .vf-keysignature, .vf-timesignature, .vf-stem, .vf-modifier') !== null
-
-            if (!isMusical && rect.width > 50 && rect.height < 3) {
-                newStaffLines.push(el); continue
-            }
-            newAllSymbols.push(el)
-
-            const elCenterX = (rect.left - containerLeft) + (rect.width / 2)
-            const match = measureBounds.find(b => elCenterX >= b.left && elCenterX <= b.right)
-            if (match) {
-                if (!newMeasureContentMap.has(match.index)) newMeasureContentMap.set(match.index, [])
-                newMeasureContentMap.get(match.index)!.push(el)
-            }
-        }
-
-        setMeasureXMap(newMeasureXMap)
-        beatXMapRef.current = newBeatXMap
-        noteMap.current = newNoteMap
-        measureContentMap.current = newMeasureContentMap
-        staffLinesRef.current = newStaffLines
-        allSymbolsRef.current = newAllSymbols
-        lastMeasureIndexRef.current = -1
-
-        if (onScoreLoaded) {
-            const counts = new Map<number, number>()
-            newNoteMap.forEach((notes, measureIndex) => {
-                counts.set(measureIndex, notes.length)
-            })
-            console.log(`[ScrollView v4.0] Exported ${xmlEventsList.length} exact XML note events for mapping.`)
-            onScoreLoaded(measureList.length, counts, xmlEventsList)
-        }
-
-    }, [osmd, onScoreLoaded])
-
-    useEffect(() => {
-        if (isLoaded) setTimeout(() => calculateNoteMap(), 100)
-    }, [isLoaded, calculateNoteMap])
-
-    useEffect(() => {
-        const handleResize = () => setTimeout(() => calculateNoteMap(), 500)
-        window.addEventListener('resize', handleResize)
-        return () => window.removeEventListener('resize', handleResize)
-    }, [calculateNoteMap])
-
+    // ─── Measure Visibility (unchanged) ────────────────────────────
     const updateMeasureVisibility = useCallback((currentMeasure: number) => {
         if (revealMode !== 'NOTE' || !measureContentMap.current) return
         measureContentMap.current.forEach((elements, measureNum) => {
@@ -468,6 +242,7 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
         prevRevealModeRef.current = revealMode
     }, [revealMode, updateMeasureVisibility, findCurrentPosition])
 
+    // ─── Dark Mode coloring ────────────────────────────────────────
     useEffect(() => {
         const baseColor = darkMode ? '#e0e0e0' : '#000000'
         const bgColor = darkMode ? '#18181b' : '#ffffff'
@@ -477,54 +252,42 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
         if (curtainRef.current) curtainRef.current.style.backgroundColor = bgColor
     }, [darkMode, isLoaded])
 
+    // ─── Cursor Positioning (rewritten for VexFlow maps) ───────────
     const updateCursorPosition = useCallback((audioTime: number) => {
-        const instance = osmd.current
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        if (!instance || !isLoaded || !(instance as any).GraphicSheet) return
+        if (!isLoaded || measureXMap.size === 0) return
 
         const posData = findCurrentPosition(audioTime)
         const { measure, beat, progress, isBeatInterpolation } = posData
         const currentMeasureIndex = measure - 1
 
         try {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const measureList = (instance as any).GraphicSheet.MeasureList
-            if (!measureList || currentMeasureIndex >= measureList.length) return
-            const measureStaves = measureList[currentMeasureIndex]
-            if (!measureStaves || measureStaves.length === 0) return
-
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const unitInPixels = (instance as any).GraphicSheet.UnitInPixels || 10
-            let firstStaffY = Number.MAX_VALUE, lastStaffY = Number.MIN_VALUE
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            measureStaves.forEach((staff: any) => {
-                const absY = staff.PositionAndShape.AbsolutePosition.y
-                if (absY < firstStaffY) firstStaffY = absY
-                if (absY > lastStaffY) lastStaffY = absY
-            })
-            const systemTop = (firstStaffY - 4) * unitInPixels
-            const systemHeight = ((lastStaffY - firstStaffY) + 12) * unitInPixels
+            // Use systemYMap for cursor positioning
+            const systemTop = systemYMapRef.current.top
+            const systemHeight = systemYMapRef.current.height
 
             let cursorX = 0
             if (isBeatInterpolation && beatXMapRef.current.has(measure)) {
                 const beatsInMeasure = beatXMapRef.current.get(measure)!
                 let startX = beatsInMeasure.get(beat)
-                if (startX === undefined) startX = (measureStaves[0].PositionAndShape.AbsolutePosition.x + measureStaves[0].PositionAndShape.BorderLeft) * unitInPixels
+                if (startX === undefined) startX = measureXMap.get(measure) || 0
 
                 let endX = 0
-                if (posData.nextMeasure === measure && posData.nextBeat) endX = beatsInMeasure.get(posData.nextBeat) || startX
-                else endX = (measureStaves[0].PositionAndShape.AbsolutePosition.x + measureStaves[0].PositionAndShape.BorderRight) * unitInPixels
+                if (posData.nextMeasure === measure && posData.nextBeat) {
+                    endX = beatsInMeasure.get(posData.nextBeat) || startX
+                } else {
+                    // End of measure: use next measure's X or estimated end
+                    const nextMeasureX = measureXMap.get(measure + 1)
+                    endX = nextMeasureX || (startX + 200)
+                }
 
                 cursorX = startX + ((endX - startX) * progress)
             } else {
-                let minX = Number.MAX_VALUE, maxX = Number.MIN_VALUE
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                measureStaves.forEach((staff: any) => {
-                    const absX = staff.PositionAndShape.AbsolutePosition.x
-                    if (absX + staff.PositionAndShape.BorderLeft < minX) minX = absX + staff.PositionAndShape.BorderLeft
-                    if (absX + staff.PositionAndShape.BorderRight > maxX) maxX = absX + staff.PositionAndShape.BorderRight
-                })
-                cursorX = minX * unitInPixels + ((maxX - minX) * unitInPixels * progress)
+                const mX = measureXMap.get(measure)
+                const nextMX = measureXMap.get(measure + 1)
+                if (mX !== undefined) {
+                    const mWidth = (nextMX !== undefined ? nextMX - mX : 250)
+                    cursorX = mX + (mWidth * progress)
+                }
             }
 
             if (cursorRef.current) {
@@ -554,8 +317,10 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
                     curtainRef.current.style.display = 'block'
                     const offset = curtainLookahead * 600
                     const curtainStart = cursorX + offset
-                    const lastMeasure = measureList[measureList.length - 1][0]
-                    const totalWidth = (lastMeasure.PositionAndShape.AbsolutePosition.x + lastMeasure.PositionAndShape.BorderRight) * unitInPixels
+                    // Use measureXMap for total width
+                    const lastMeasureNum = Math.max(...Array.from(measureXMap.keys()))
+                    const lastMeasureX = measureXMap.get(lastMeasureNum) || 0
+                    const totalWidth = lastMeasureX + 300  // approximate end
                     curtainRef.current.style.left = `${curtainStart}px`
                     curtainRef.current.style.width = `${Math.max(0, totalWidth - curtainStart + 800)}px`
                     curtainRef.current.style.height = `${Math.max(containerRef.current?.scrollHeight || 0, containerRef.current?.clientHeight || 0)}px`
@@ -581,6 +346,7 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
             }
             lastMeasureIndexRef.current = currentMeasureIndex
 
+            // ─── Note Effects (unchanged logic) ────────────────────
             const notesInMeasure = noteMap.current.get(measure)
             const previewEffects = useAppStore.getState().previewEffects
             if (notesInMeasure && (!isAdmin || previewEffects)) {
@@ -590,15 +356,6 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
                 }
                 const defaultColor = darkMode ? '#e0e0e0' : '#000000'
                 const highlightColor = '#10B981'; const shadowColor = '#10B981'
-
-                // DEBUG: Log effect state periodically
-                if (Math.random() < 0.005) {
-                    const activeCount = notesInMeasure.filter(n => {
-                        const noteEnd = n.timestamp + 0.01
-                        return globalProgress <= noteEnd && globalProgress >= n.timestamp - 0.04
-                    }).length
-                    console.log(`[EFFECTS DEBUG] M${measure} B${beat} | progress=${progress.toFixed(3)} globalProgress=${globalProgress.toFixed(3)} | notes=${notesInMeasure.length} active=${activeCount} | highlight=${highlightNote} jump=${jumpEffect} pop=${popEffect} glow=${glowEffect}`)
-                }
 
                 notesInMeasure.forEach(note => {
                     if (!note.element) return
@@ -620,8 +377,9 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
             }
 
         } catch { /* ignore */ }
-    }, [findCurrentPosition, isLoaded, revealMode, updateMeasureVisibility, popEffect, jumpEffect, glowEffect, darkMode, highlightNote, cursorPosition, isLocked, curtainLookahead, showCursor, isAdmin, onMeasureChange])
+    }, [findCurrentPosition, isLoaded, measureXMap, revealMode, updateMeasureVisibility, popEffect, jumpEffect, glowEffect, darkMode, highlightNote, cursorPosition, isLocked, curtainLookahead, showCursor, isAdmin, onMeasureChange])
 
+    // ─── Animation Loop (unchanged) ────────────────────────────────
     useEffect(() => {
         if (!isLoaded) return
         const animate = () => {
@@ -632,54 +390,36 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
         return () => cancelAnimationFrame(animationFrameRef.current)
     }, [isLoaded, updateCursorPosition])
 
+    // ─── Score Click (rewritten for VexFlow maps) ──────────────────
     const handleScoreClick = useCallback((event: React.MouseEvent) => {
-        const osmdInstance = osmd.current
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        if (!osmdInstance || !(osmdInstance as any).GraphicSheet || !containerRef.current) return
+        if (!containerRef.current || measureXMap.size === 0) return
         const rect = containerRef.current.getBoundingClientRect()
         const clickX = event.clientX - rect.left
-        const clickY = event.clientY - rect.top
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const measureList = (osmdInstance as any).GraphicSheet.MeasureList
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const unitInPixels = (osmdInstance as any).GraphicSheet.UnitInPixels || 10
-        let clickedMeasureIndex = -1
-
-        for (let i = 0; i < measureList.length; i++) {
-            const measureStaves = measureList[i]
-            if (!measureStaves) continue
-            let minY = Number.MAX_VALUE, maxY = Number.MIN_VALUE, minX = Number.MAX_VALUE, maxX = Number.MIN_VALUE
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            measureStaves.forEach((staff: any) => {
-                const pos = staff.PositionAndShape
-                if (!pos) return
-                if (pos.AbsolutePosition.y + pos.BorderTop < minY) minY = pos.AbsolutePosition.y + pos.BorderTop
-                if (pos.AbsolutePosition.y + pos.BorderBottom > maxY) maxY = pos.AbsolutePosition.y + pos.BorderBottom
-                if (pos.AbsolutePosition.x + pos.BorderLeft < minX) minX = pos.AbsolutePosition.x + pos.BorderLeft
-                if (pos.AbsolutePosition.x + pos.BorderRight > maxX) maxX = pos.AbsolutePosition.x + pos.BorderRight
-            })
-            if (clickX >= minX * unitInPixels && clickX <= maxX * unitInPixels && clickY >= minY * unitInPixels && clickY <= maxY * unitInPixels) {
-                clickedMeasureIndex = i
+        // Find the clicked measure using measureXMap
+        const sortedMeasures = Array.from(measureXMap.entries()).sort((a, b) => a[1] - b[1])
+        let clickedMeasure = -1
+        for (let i = sortedMeasures.length - 1; i >= 0; i--) {
+            if (clickX >= sortedMeasures[i][1]) {
+                clickedMeasure = sortedMeasures[i][0]
                 break
             }
         }
 
-        if (clickedMeasureIndex !== -1) {
-            const measureNumber = clickedMeasureIndex + 1
+        if (clickedMeasure !== -1) {
             const sortedAnchors = [...anchors].sort((a, b) => a.measure - b.measure)
-            const targetAnchor = sortedAnchors.reverse().find(a => a.measure <= measureNumber)
+            const targetAnchor = sortedAnchors.reverse().find(a => a.measure <= clickedMeasure)
             if (targetAnchor) {
                 getPlaybackManager().seek(targetAnchor.time)
             }
         }
-    }, [anchors, osmd])
+    }, [anchors, measureXMap])
 
     return (
         <div ref={scrollContainerRef} className={`relative w-full h-full overflow-auto overscroll-none ${darkMode ? 'bg-zinc-900' : 'bg-white'}`}>
             <div ref={containerRef} onClick={handleScoreClick} className="relative min-w-full w-fit min-h-[400px]">
 
-                {!isLoaded && xmlUrl && (
+                {!isLoaded && xmlUrl && !parseError && (
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                         <div className="text-center space-y-2">
                             <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto" />
@@ -688,7 +428,18 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
                     </div>
                 )}
 
-                <div ref={osmdContainerRef} style={{ visibility: isLoaded ? 'visible' : 'hidden', filter: darkMode ? 'brightness(0.9)' : 'none' }} />
+                {parseError && (
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <p className="text-red-500 text-sm">Error: {parseError}</p>
+                    </div>
+                )}
+
+                {/* VexFlow Renderer */}
+                <VexFlowRenderer
+                    score={intermediateScore}
+                    onRenderComplete={handleRenderComplete}
+                    darkMode={darkMode}
+                />
 
                 <div ref={cursorRef} className="absolute pointer-events-none transition-none z-[1000]" style={{ display: 'none' }} />
                 <div ref={curtainRef} className="absolute pointer-events-none z-[999]" style={{ display: 'none', top: 0, bottom: 0 }} />
