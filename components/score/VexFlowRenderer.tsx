@@ -346,19 +346,27 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                 voicesByStave.forEach(voices => formatter.joinVoices(voices))
 
                 // Create Tuplet objects BEFORE formatting so VexFlow adjusts tick counts
-                // (3 eighth triplet notes occupy 2 eighths' worth of time → 1 quarter)
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const vfTuplets: any[] = []
                 measureTuplets.forEach(t => {
                     try {
+                        // Manually apply tick ratio BEFORE Tuplet constructor
+                        // (Tuplet constructor in VexFlow v5 does NOT modify ticks)
+                        for (const note of t.notes) {
+                            try {
+                                const n = note as any
+                                const ticksBefore = n.getTicks?.()?.value?.() ?? 'N/A'
+                                n.applyTickMultiplier(t.normal, t.actual)
+                                const ticksAfter = n.getTicks?.()?.value?.() ?? 'N/A'
+                                console.log(`[TUPLET-TICK] M${measureNumber} ticks: ${ticksBefore} → ${ticksAfter}`)
+                            } catch { /* ignore */ }
+                        }
+
                         const tuplet = new Tuplet(t.notes, {
                             numNotes: t.actual,
                             notesOccupied: t.normal,
-                            bracketed: false, // beam already groups them visually
-                            yOffset: 18,      // bring "3" closer to the beam
+                            bracketed: false,
                         })
-                        // Smaller font for the tuplet number
-                        try { (tuplet as any).setFont({ size: 10 }) } catch { /* ignore */ }
                         vfTuplets.push(tuplet)
                     } catch { /* ignore */ }
                 })
@@ -403,10 +411,35 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                 vfVoices.forEach(v => v.draw(context, voiceStaveMap.get(v)!))
                 measureBeams.forEach(b => b.setContext(context).draw())
 
-                // Draw tuplets (already created, just need rendering)
+                // Draw tuplets, then post-process SVG for font size + position
                 vfTuplets.forEach(t => {
                     try { t.setContext(context).draw() } catch { /* ignore */ }
                 })
+
+                // Post-render: shrink tuplet numbers via SVG DOM manipulation
+                if (vfTuplets.length > 0) {
+                    try {
+                        const svgEl = (context as any).svg || (context as any).element
+                        if (svgEl) {
+                            // Find all text elements that contain just a number (tuplet numbers)
+                            const textEls = svgEl.querySelectorAll('text')
+                            for (const textEl of textEls) {
+                                const content = textEl.textContent?.trim()
+                                if (content && /^\d+$/.test(content) && parseInt(content) <= 9) {
+                                    // Check if this is likely a tuplet number by checking nearby context
+                                    const currentSize = parseFloat(textEl.getAttribute('font-size') || '0')
+                                    if (currentSize >= 12) {
+                                        textEl.setAttribute('font-size', '10')
+                                        // Move it down closer to the beam
+                                        const currentY = parseFloat(textEl.getAttribute('y') || '0')
+                                        textEl.setAttribute('y', String(currentY + 6))
+                                        console.log(`[TUPLET-SVG] M${measureNumber} resized text "${content}" from ${currentSize}px → 10px, y: ${currentY} → ${currentY + 6}`)
+                                    }
+                                }
+                            }
+                        }
+                    } catch { /* ignore */ }
+                }
             }
 
             // Extract accurate coordinates now that formatting is complete
