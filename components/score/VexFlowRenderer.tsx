@@ -411,43 +411,37 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                 vfVoices.forEach(v => v.draw(context, voiceStaveMap.get(v)!))
                 measureBeams.forEach(b => b.setContext(context).draw())
 
-                // Draw tuplets, then post-process SVG for font size + position
-                vfTuplets.forEach(t => {
-                    try { t.setContext(context).draw() } catch { /* ignore */ }
-                })
-
-                // Post-render: shrink tuplet numbers via SVG DOM manipulation
-                if (vfTuplets.length > 0 && containerRef.current) {
-                    try {
-                        const svgEl = containerRef.current.querySelector('svg')
-                        if (svgEl) {
-                            // VexFlow renders tuplet numbers as <text> elements
-                            const textEls = svgEl.querySelectorAll('text')
-                            console.log(`[TUPLET-SVG] M${measureNumber} found ${textEls.length} text elements in SVG`)
-                            // Log sample of text contents to identify tuplet number format
-                            let sampleCount = 0
-                            for (const textEl of textEls) {
-                                const content = textEl.textContent?.trim()
-                                if (content && content.length <= 3 && sampleCount < 15) {
+                // Draw tuplets with before/after tracking to identify tuplet number SVG elements
+                if (containerRef.current) {
+                    const svgEl = containerRef.current.querySelector('svg')
+                    vfTuplets.forEach(t => {
+                        try {
+                            const textCountBefore = svgEl ? svgEl.querySelectorAll('text').length : 0
+                            t.setContext(context).draw()
+                            if (svgEl) {
+                                const allTexts = svgEl.querySelectorAll('text')
+                                // New text elements added by this tuplet draw
+                                for (let i = textCountBefore; i < allTexts.length; i++) {
+                                    const textEl = allTexts[i]
+                                    const content = textEl.textContent?.trim() || ''
                                     const charCodes = Array.from(content).map(c => c.charCodeAt(0))
-                                    console.log(`[TUPLET-SVG] M${measureNumber} text="${content}" charCodes=[${charCodes}] font-size=${textEl.getAttribute('font-size') || 'N/A'} font-family=${textEl.getAttribute('font-family')?.substring(0, 20) || 'N/A'}`)
-                                    sampleCount++
-                                }
-                                if (content && /^\d+$/.test(content) && parseInt(content) <= 9) {
-                                    const currentSize = parseFloat(textEl.getAttribute('font-size') || textEl.style.fontSize || '0')
-                                    console.log(`[TUPLET-SVG] M${measureNumber} text="${content}" font-size=${currentSize} font-family=${textEl.getAttribute('font-family') || 'N/A'}`)
-                                    if (currentSize >= 12) {
-                                        textEl.setAttribute('font-size', '10')
-                                        const currentY = parseFloat(textEl.getAttribute('y') || '0')
-                                        textEl.setAttribute('y', String(currentY + 6))
-                                        console.log(`[TUPLET-SVG] M${measureNumber} resized "${content}": ${currentSize}→10px, y:${currentY}→${currentY + 6}`)
+                                    const currentSize = parseFloat(textEl.getAttribute('font-size') || '0')
+                                    const currentY = parseFloat(textEl.getAttribute('y') || '0')
+                                    console.log(`[TUPLET-NUM] M${measureNumber} found tuplet text: charCodes=[${charCodes}] size=${currentSize} y=${currentY}`)
+                                    // Shrink and reposition
+                                    if (currentSize > 0) {
+                                        textEl.setAttribute('font-size', String(currentSize * 0.7))
+                                        textEl.setAttribute('y', String(currentY + 8))
+                                        console.log(`[TUPLET-NUM] M${measureNumber} resized: ${currentSize}→${currentSize * 0.7}, y: ${currentY}→${currentY + 8}`)
                                     }
                                 }
                             }
-                        } else {
-                            console.warn(`[TUPLET-SVG] M${measureNumber} no SVG element found in container`)
-                        }
-                    } catch (e) { console.warn('[TUPLET-SVG] error:', e) }
+                        } catch { /* ignore */ }
+                    })
+                } else {
+                    vfTuplets.forEach(t => {
+                        try { t.setContext(context).draw() } catch { /* ignore */ }
+                    })
                 }
             }
 
