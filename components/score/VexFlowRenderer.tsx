@@ -350,12 +350,22 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                 const vfTuplets: any[] = []
                 measureTuplets.forEach(t => {
                     try {
+                        // Manually apply tick ratio so formatter gives correct proportional spacing
+                        // For 3:2 triplet, each note gets 2/3 of its normal ticks
+                        for (const note of t.notes) {
+                            try {
+                                (note as any).applyTickMultiplier(t.normal, t.actual)
+                            } catch { /* ignore if method unavailable */ }
+                        }
+
                         const tuplet = new Tuplet(t.notes, {
                             numNotes: t.actual,
                             notesOccupied: t.normal,
                             bracketed: false, // beam already groups them visually
-                            yOffset: 8,       // bring "3" closer to the notes
+                            yOffset: 14,      // bring "3" closer to the beam
                         })
+                        // Smaller font for the tuplet number
+                        try { (tuplet as any).setFont({ size: 10 }) } catch { /* ignore */ }
                         vfTuplets.push(tuplet)
                     } catch { /* ignore */ }
                 })
