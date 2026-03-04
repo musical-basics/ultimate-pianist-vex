@@ -168,7 +168,6 @@ export function detectHeuristicTuplets(
             const tripletNotes = [vfNotes[ni], vfNotes[ni + 1], vfNotes[ni + 2]]
             detected.push({ notes: tripletNotes, actual: 3, normal: 2 })
             tripletNotes.forEach(n => tupletNoteIds.add(n))
-            console.log(`[TUPLET-HEURISTIC] M${measureNumber} detected triplet (overflow: ${totalBeats.toFixed(2)} > ${measureCapacity}) at notes ${ni}-${ni + 2}`)
         }
     }
 

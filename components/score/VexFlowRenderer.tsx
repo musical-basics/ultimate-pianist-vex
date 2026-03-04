@@ -396,10 +396,7 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                         for (const note of t.notes) {
                             try {
                                 const n = note as any
-                                const ticksBefore = n.getTicks?.()?.value?.() ?? 'N/A'
                                 n.applyTickMultiplier(t.normal, t.actual)
-                                const ticksAfter = n.getTicks?.()?.value?.() ?? 'N/A'
-                                console.log(`[TUPLET-TICK] M${measureNumber} ticks: ${ticksBefore} → ${ticksAfter}`)
                             } catch { /* ignore */ }
                         }
 
@@ -486,7 +483,6 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
 
                                 if (Math.abs(shift) >= 1) {
                                     try { (tickables[i] as any).setXShift(shift) } catch { /* ignore */ }
-                                    console.log(`[TUPLET-SPACE] M${measureNumber} setXShift(${shift.toFixed(1)}) on note ${i} (ticks=${tickValues[i].toFixed(0)}, relX=${relPositions[i].toFixed(0)})`)
                                 }
                             }
                         } catch (e) { console.warn(`[TUPLET-SPACE] M${measureNumber} error:`, e) }
@@ -535,7 +531,6 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                                         textEl.setAttribute('x', String(origX / 0.65))
                                     }
                                     textEl.setAttribute('y', String((currentY + 20) / 0.65))
-                                    console.log(`[TUPLET-NUM] M${measureNumber} centered at x=${centerX.toFixed(0)}, y adjusted`)
                                 }
                             }
                         } catch { /* ignore */ }
