@@ -285,15 +285,15 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                     }
 
                     // Flush any unclosed tuplet at end of voice
-                    // (handles cross-measure tuplets like M16 where start has no stop)
-                    if (currentTupletNotes && currentTupletNotes.length > 0) {
+                    // Only if 2+ notes (skip cross-measure single-note tuplets like M16)
+                    if (currentTupletNotes && currentTupletNotes.length >= 2) {
                         measureTuplets.push({
                             notes: currentTupletNotes,
                             actual: currentTupletActual,
                             normal: currentTupletNormal,
                         })
-                        currentTupletNotes = null
                     }
+                    currentTupletNotes = null
 
                     // Within-measure ties
                     for (let ni = 0; ni < voice.notes.length - 1; ni++) {
@@ -383,7 +383,7 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                 })
 
                 // Format all voices together for cross-stave X alignment
-                formatter.format(vfVoices, STAVE_WIDTH - 40, { globalSoftmax: true })
+                formatter.format(vfVoices, STAVE_WIDTH - 40, { globalSoftmax: true, softmaxFactor: 100 })
 
                 // Post-format: reposition articulations based on resolved stem direction
                 // Single voice: notehead side (stem up → BELOW, stem down → ABOVE)
