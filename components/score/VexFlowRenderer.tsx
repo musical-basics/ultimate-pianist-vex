@@ -330,28 +330,27 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                 // Format all voices together for cross-stave X alignment
                 formatter.format(vfVoices, STAVE_WIDTH - 40)
 
-                // DEBUG: Log articulation positions AFTER formatting (stem direction now resolved)
-                if (mIdx <= 2) { // Only log first 3 measures to avoid spam
-                    vfVoices.forEach((v, vi) => {
-                        const tickables = v.getTickables()
-                        tickables.forEach((t, ti) => {
-                            const sn = t as StaveNote
-                            try {
-                                const stemDir = sn.getStemDirection() // 1 = up, -1 = down
-                                const mods = sn.getModifiers()
-                                const arts = mods.filter((m: any) => m.getCategory?.() === 'articulations' || m.constructor?.name === 'Articulation')
-                                if (arts.length > 0) {
-                                    console.log(`[ART-DEBUG] M${measureNumber} voice${vi} note${ti}: stemDir=${stemDir}, arts=${arts.length}`,
-                                        arts.map((a: any) => ({
-                                            position: a.getPosition?.(),
-                                            type: a.type || a.articulation,
-                                        }))
-                                    )
+                // Post-format: reposition articulations based on resolved stem direction
+                // VexFlow v5 doesn't auto-flip articulation position with autoStem
+                // Convention: stem up → articulations BELOW (4), stem down → ABOVE (3)
+                vfVoices.forEach(v => {
+                    const tickables = v.getTickables()
+                    for (const t of tickables) {
+                        const sn = t as StaveNote
+                        try {
+                            const stemDir = sn.getStemDirection() // 1 = up, -1 = down
+                            const mods = sn.getModifiers()
+                            for (const m of mods) {
+                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                const mod = m as any
+                                if (mod.getCategory?.() === 'articulations' || mod.constructor?.name === 'Articulation') {
+                                    // Position: 3 = ABOVE, 4 = BELOW
+                                    mod.setPosition(stemDir === 1 ? 4 : 3)
                                 }
-                            } catch (e) { /* ignore */ }
-                        })
-                    })
-                }
+                            }
+                        } catch { /* ignore */ }
+                    }
+                })
 
                 vfVoices.forEach(v => v.draw(context, voiceStaveMap.get(v)!))
                 measureBeams.forEach(b => b.setContext(context).draw())
