@@ -8,7 +8,7 @@
 
 import * as React from 'react'
 import { useRef, useEffect, useCallback, useState } from 'react'
-import { loadFonts } from 'vexflow'
+import { VexFlow } from 'vexflow'
 import {
     Renderer,
     Stave,
@@ -55,7 +55,7 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
 
     // Load Bravura music font once (VexFlow v5 requires explicit font loading)
     useEffect(() => {
-        loadFonts().then(() => setFontsLoaded(true)).catch(() => {
+        VexFlow.loadFonts().then(() => setFontsLoaded(true)).catch(() => {
             console.warn('[VEXFLOW] Font loading failed, using defaults')
             setFontsLoaded(true) // proceed anyway with fallback fonts
         })
