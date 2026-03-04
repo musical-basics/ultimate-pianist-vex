@@ -285,8 +285,8 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                     }
 
                     // Flush any unclosed tuplet at end of voice
-                    // (handles cross-measure tuplets like M16 where start has no stop)
-                    if (currentTupletNotes && currentTupletNotes.length > 0) {
+                    // Only flush if 2+ notes (skip single-note cross-measure tuplets like M16)
+                    if (currentTupletNotes && currentTupletNotes.length >= 2) {
                         measureTuplets.push({
                             notes: currentTupletNotes,
                             actual: currentTupletActual,
@@ -468,15 +468,10 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                             const tupletData = measureTuplets[tIdx]
                             let centerX = 0
                             if (tupletData && tupletData.notes.length > 0) {
-                                // Use middle note for centering (or midpoint of first/last)
-                                if (tupletData.notes.length >= 3) {
-                                    const midIdx = Math.floor(tupletData.notes.length / 2)
-                                    centerX = tupletData.notes[midIdx].getAbsoluteX()
-                                } else {
-                                    const firstNoteX = tupletData.notes[0].getAbsoluteX()
-                                    const lastNoteX = tupletData.notes[tupletData.notes.length - 1].getAbsoluteX()
-                                    centerX = (firstNoteX + lastNoteX) / 2
-                                }
+                                // Average of first and last note X for centered positioning
+                                const firstNoteX = tupletData.notes[0].getAbsoluteX()
+                                const lastNoteX = tupletData.notes[tupletData.notes.length - 1].getAbsoluteX()
+                                centerX = (firstNoteX + lastNoteX) / 2
                             }
 
                             const textCountBefore = svgEl ? svgEl.querySelectorAll('text').length : 0
