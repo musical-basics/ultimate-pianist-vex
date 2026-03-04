@@ -428,12 +428,14 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                                     const currentSize = parseFloat(textEl.getAttribute('font-size') || '0')
                                     const currentY = parseFloat(textEl.getAttribute('y') || '0')
                                     console.log(`[TUPLET-NUM] M${measureNumber} found tuplet text: charCodes=[${charCodes}] size=${currentSize} y=${currentY}`)
-                                    // Shrink and reposition
-                                    if (currentSize > 0) {
-                                        textEl.setAttribute('font-size', String(currentSize * 0.7))
-                                        textEl.setAttribute('y', String(currentY + 8))
-                                        console.log(`[TUPLET-NUM] M${measureNumber} resized: ${currentSize}→${currentSize * 0.7}, y: ${currentY}→${currentY + 8}`)
-                                    }
+                                    // Always shrink and reposition — font-size may be inherited (0 here)
+                                    // Use transform scale as reliable fallback
+                                    textEl.setAttribute('transform', `scale(0.65)`)
+                                    // Adjust position to compensate for scale origin
+                                    const x = parseFloat(textEl.getAttribute('x') || '0')
+                                    textEl.setAttribute('x', String(x / 0.65))
+                                    textEl.setAttribute('y', String((currentY + 5) / 0.65))
+                                    console.log(`[TUPLET-NUM] M${measureNumber} applied scale(0.65), adjusted x/y`)
                                 }
                             }
                         } catch { /* ignore */ }
