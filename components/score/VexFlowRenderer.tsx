@@ -284,34 +284,68 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                         }
                     }
 
-                    // Heuristic triplet detection: in 3/4 time, 3 beamed eighths
-                    // alongside a half note = triplet (even if MusicXML doesn't mark them)
-                    if (currentTimeSigNum === 3 && currentTimeSigDen === 4) {
-                        // Find groups of exactly 3 consecutive beamed eighths not already in a tuplet
-                        const tupletNoteIds = new Set<StaveNote>()
-                        measureTuplets.forEach(t => t.notes.forEach(n => tupletNoteIds.add(n)))
+                    // Heuristic triplet detection: only when voice note values OVERFLOW the measure
+                    // (e.g. in 3/4: dotted quarter + 3 eighths + half = 5 beats > 3 → eighths are triplets)
+                    {
+                        // Calculate total beat value of all notes in this voice
+                        const durationToBeats = (dur: string): number => {
+                            const base = dur.replace(/[rd]/g, '')
+                            let beats = 0
+                            switch (base) {
+                                case 'w': beats = 4; break
+                                case 'h': beats = 2; break
+                                case 'q': beats = 1; break
+                                case '8': beats = 0.5; break
+                                case '16': beats = 0.25; break
+                                case '32': beats = 0.125; break
+                                default: beats = 1; break
+                            }
+                            return beats
+                        }
 
-                        for (let ni = 0; ni <= voice.notes.length - 3; ni++) {
-                            const n0 = voice.notes[ni]
-                            const n1 = voice.notes[ni + 1]
-                            const n2 = voice.notes[ni + 2]
-                            // All 3 must be eighth notes and not rests
-                            const allEighths = n0.duration === '8' && n1.duration === '8' && n2.duration === '8'
-                            const noRests = !n0.isRest && !n1.isRest && !n2.isRest
-                            // Not already tracked as tuplet
-                            const notAlreadyTuplet = !tupletNoteIds.has(vfNotes[ni]) && !tupletNoteIds.has(vfNotes[ni + 1]) && !tupletNoteIds.has(vfNotes[ni + 2])
-                            // None of them have tupletStart/tupletStop flags
-                            const noTupletFlags = !n0.tupletStart && !n0.tupletStop && !n1.tupletStart && !n1.tupletStop && !n2.tupletStart && !n2.tupletStop
+                        let totalBeats = 0
+                        for (const n of voice.notes) {
+                            let beats = durationToBeats(n.duration)
+                            // Apply dots: each dot adds half of the previous value
+                            let dotValue = beats / 2
+                            for (let d = 0; d < n.dots; d++) {
+                                beats += dotValue
+                                dotValue /= 2
+                            }
+                            // If note already has tuplet markers with time-modification, use modified duration
+                            if (n.tupletActual && n.tupletNormal) {
+                                beats = beats * n.tupletNormal / n.tupletActual
+                            }
+                            totalBeats += beats
+                        }
 
-                            if (allEighths && noRests && notAlreadyTuplet && noTupletFlags) {
-                                const tripletNotes = [vfNotes[ni], vfNotes[ni + 1], vfNotes[ni + 2]]
-                                measureTuplets.push({
-                                    notes: tripletNotes,
-                                    actual: 3,
-                                    normal: 2,
-                                })
-                                tripletNotes.forEach(n => tupletNoteIds.add(n))
-                                console.log(`[TUPLET-HEURISTIC] M${measureNumber} detected triplet at notes ${ni}-${ni + 2}`)
+                        const measureCapacity = currentTimeSigNum * (4 / currentTimeSigDen) // beats in quarter notes
+                        const overflows = totalBeats > measureCapacity + 0.01 // small epsilon
+
+                        if (overflows) {
+                            // Find groups of 3 consecutive non-rest eighth notes not already in tuplet
+                            const tupletNoteIds = new Set<StaveNote>()
+                            measureTuplets.forEach(t => t.notes.forEach(n => tupletNoteIds.add(n)))
+
+                            for (let ni = 0; ni <= voice.notes.length - 3; ni++) {
+                                const n0 = voice.notes[ni]
+                                const n1 = voice.notes[ni + 1]
+                                const n2 = voice.notes[ni + 2]
+                                const allEighths = n0.duration === '8' && n1.duration === '8' && n2.duration === '8'
+                                const noRests = !n0.isRest && !n1.isRest && !n2.isRest
+                                const notAlreadyTuplet = !tupletNoteIds.has(vfNotes[ni]) && !tupletNoteIds.has(vfNotes[ni + 1]) && !tupletNoteIds.has(vfNotes[ni + 2])
+                                const noTupletFlags = !n0.tupletStart && !n0.tupletStop && !n1.tupletStart && !n1.tupletStop && !n2.tupletStart && !n2.tupletStop
+
+                                if (allEighths && noRests && notAlreadyTuplet && noTupletFlags) {
+                                    const tripletNotes = [vfNotes[ni], vfNotes[ni + 1], vfNotes[ni + 2]]
+                                    measureTuplets.push({
+                                        notes: tripletNotes,
+                                        actual: 3,
+                                        normal: 2,
+                                    })
+                                    tripletNotes.forEach(n => tupletNoteIds.add(n))
+                                    console.log(`[TUPLET-HEURISTIC] M${measureNumber} detected triplet (overflow: ${totalBeats.toFixed(2)} > ${measureCapacity}) at notes ${ni}-${ni + 2}`)
+                                }
                             }
                         }
                     }
