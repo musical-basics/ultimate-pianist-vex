@@ -409,12 +409,11 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                     } catch { /* ignore */ }
                 })
 
-                // Format all voices using actual available note width (accounts for clef/keysig)
-                const noteWidths = Object.values(staveMap).map(s => {
-                    try { return s.getNoteEndX() - s.getNoteStartX() } catch { return STAVE_WIDTH - 40 }
+                // Format all voices to their staves for cross-stave X alignment
+                // formatToStave uses the stave's actual geometry for proper beat alignment
+                voicesByStave.forEach((voices, stave) => {
+                    formatter.formatToStave(voices, stave)
                 })
-                const availableWidth = Math.min(...noteWidths, STAVE_WIDTH - 40)
-                formatter.format(vfVoices, availableWidth)
 
                 // Post-format: reposition articulations based on resolved stem direction
                 vfVoices.forEach(v => {
