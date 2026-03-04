@@ -412,68 +412,52 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                     }
                 })
 
-                // Draw voices and beams
+                // Pre-draw: reposition notes in tuplet measures for proportional spacing
+                // Uses tickContext.getX() (relative positions set by formatter) + setXShift()
+                // Must happen BEFORE draw() so beams/stems render at correct positions
+                if (measureTuplets.length > 0) {
+                    vfVoices.forEach(v => {
+                        const tickables = v.getTickables() as StaveNote[]
+                        if (tickables.length < 2) return
+
+                        try {
+                            // Read formatter-assigned relative X positions via TickContext
+                            const relPositions: number[] = []
+                            const tickValues: number[] = []
+                            for (const t of tickables) {
+                                const tc = (t as any).getTickContext?.()
+                                const relX = tc?.getX?.() ?? 0
+                                relPositions.push(relX)
+                                const ticks = (t as any).getTicks?.()?.value?.() ?? 2048
+                                tickValues.push(ticks)
+                            }
+
+                            const firstX = relPositions[0]
+                            const lastX = relPositions[relPositions.length - 1]
+                            const totalWidth = lastX - firstX
+                            if (totalWidth <= 0) return
+
+                            const totalTicks = tickValues.reduce((s, t) => s + t, 0)
+
+                            // Calculate proportional targets and apply X shifts
+                            let accumulated = 0
+                            for (let i = 0; i < tickables.length; i++) {
+                                const targetX = firstX + (accumulated / totalTicks) * totalWidth
+                                const shift = targetX - relPositions[i]
+                                accumulated += tickValues[i]
+
+                                if (Math.abs(shift) >= 1) {
+                                    try { (tickables[i] as any).setXShift(shift) } catch { /* ignore */ }
+                                    console.log(`[TUPLET-SPACE] M${measureNumber} setXShift(${shift.toFixed(1)}) on note ${i} (ticks=${tickValues[i].toFixed(0)}, relX=${relPositions[i].toFixed(0)})`)
+                                }
+                            }
+                        } catch (e) { console.warn(`[TUPLET-SPACE] M${measureNumber} error:`, e) }
+                    })
+                }
+
+                // Draw voices and beams (with XShift applied for proportional spacing)
                 vfVoices.forEach(v => v.draw(context, voiceStaveMap.get(v)!))
                 measureBeams.forEach(b => b.setContext(context).draw())
-
-                // Post-draw: reposition notes in tuplet measures for proportional spacing
-                // Uses getAbsoluteX() which requires draw() to have been called
-                if (measureTuplets.length > 0 && containerRef.current) {
-                    const svgEl = containerRef.current.querySelector('svg')
-                    if (svgEl) {
-                        vfVoices.forEach(v => {
-                            const tickables = v.getTickables() as StaveNote[]
-                            if (tickables.length < 2) return
-
-                            try {
-                                // Read actual rendered positions
-                                const xPositions: number[] = []
-                                const tickValues: number[] = []
-                                const noteIds: string[] = []
-                                for (const t of tickables) {
-                                    xPositions.push(t.getAbsoluteX())
-                                    const ticks = (t as any).getTicks?.()?.value?.() ?? 2048
-                                    tickValues.push(ticks)
-                                    noteIds.push(t.getAttribute('id') as string || '')
-                                }
-
-                                const firstX = xPositions[0]
-                                const lastX = xPositions[xPositions.length - 1]
-                                const totalWidth = lastX - firstX
-                                if (totalWidth <= 0) return
-
-                                const totalTicks = tickValues.reduce((s, t) => s + t, 0)
-
-                                console.log(`[TUPLET-SPACE] M${measureNumber} notes: ${noteIds.map((id, i) => `${id}:t=${tickValues[i]}@x=${xPositions[i].toFixed(0)}`).join(', ')}`)
-
-                                // Calculate proportional target positions
-                                let accumulated = 0
-                                for (let i = 0; i < tickables.length; i++) {
-                                    const targetX = firstX + (accumulated / totalTicks) * totalWidth
-                                    const shift = targetX - xPositions[i]
-                                    accumulated += tickValues[i]
-
-                                    if (Math.abs(shift) < 1) continue
-
-                                    // Find SVG group by id attribute
-                                    // VexFlow's openGroup() calls prefix(id) which adds 'vf-'
-                                    const noteId = noteIds[i]
-                                    if (noteId) {
-                                        const svgId = `vf-${noteId}` // VexFlow adds 'vf-' prefix
-                                        const el = svgEl.querySelector(`[id="${svgId}"]`)
-                                        if (el) {
-                                            const existing = el.getAttribute('transform') || ''
-                                            el.setAttribute('transform', `${existing} translate(${shift.toFixed(1)}, 0)`)
-                                            console.log(`[TUPLET-SPACE] M${measureNumber} shifted ${noteId}: ${shift.toFixed(1)}px`)
-                                        } else {
-                                            console.warn(`[TUPLET-SPACE] M${measureNumber} SVG element not found for id: ${noteId}`)
-                                        }
-                                    }
-                                }
-                            } catch (e) { console.warn(`[TUPLET-SPACE] M${measureNumber} error:`, e) }
-                        })
-                    }
-                }
 
                 // Draw tuplets, then center the "3" between first and last tuplet note
                 if (containerRef.current) {
