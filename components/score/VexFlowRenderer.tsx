@@ -39,6 +39,7 @@ interface VexFlowRendererProps {
     score: IntermediateScore | null
     onRenderComplete?: (result: VexFlowRenderResult) => void
     darkMode?: boolean
+    musicFont?: string
 }
 
 // ─── Component ─────────────────────────────────────────────────────
@@ -47,19 +48,23 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
     score,
     onRenderComplete,
     darkMode = false,
+    musicFont = 'Bravura',
 }) => {
     const containerRef = useRef<HTMLDivElement>(null)
     const rendererRef = useRef<Renderer | null>(null)
     const [isRendered, setIsRendered] = useState(false)
     const [fontsLoaded, setFontsLoaded] = useState(false)
 
-    // Load Bravura music font once (VexFlow v5 requires explicit font loading)
+    // Load music font once (VexFlow v5 requires explicit font loading)
     useEffect(() => {
-        VexFlow.loadFonts().then(() => setFontsLoaded(true)).catch(() => {
+        VexFlow.loadFonts(musicFont).then(() => {
+            VexFlow.setFonts(musicFont)
+            setFontsLoaded(true)
+        }).catch(() => {
             console.warn('[VEXFLOW] Font loading failed, using defaults')
             setFontsLoaded(true) // proceed anyway with fallback fonts
         })
-    }, [])
+    }, [musicFont])
 
     const renderScore = useCallback(() => {
         if (!score || !containerRef.current || score.measures.length === 0 || !fontsLoaded) return
@@ -641,7 +646,7 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
             }
         })
 
-    }, [score, onRenderComplete, fontsLoaded])
+    }, [score, onRenderComplete, fontsLoaded, musicFont])
 
     // Render when score changes
     useEffect(() => {

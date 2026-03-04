@@ -58,6 +58,7 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
 
     // ─── Parsing State ─────────────────────────────────────────────
     const [intermediateScore, setIntermediateScore] = useState<IntermediateScore | null>(null)
+    const [musicFont, setMusicFont] = useState('Bravura')
     const [isLoaded, setIsLoaded] = useState(false)
     const [parseError, setParseError] = useState<string | null>(null)
     const xmlEventsRef = useRef<XMLEvent[]>([])
@@ -455,11 +456,31 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
                     </div>
                 )}
 
+                {/* Music Font Selector (admin only) */}
+                {isAdmin && (
+                    <div className="sticky top-0 z-[100] flex justify-end p-1 pr-3">
+                        <select
+                            value={musicFont}
+                            onChange={(e) => setMusicFont(e.target.value)}
+                            className={`text-xs px-2 py-1 rounded border ${darkMode
+                                    ? 'bg-zinc-800 border-zinc-600 text-zinc-300'
+                                    : 'bg-white border-zinc-300 text-zinc-700'
+                                } cursor-pointer`}
+                        >
+                            <option value="Bravura">Bravura</option>
+                            <option value="Gonville">Gonville</option>
+                            <option value="Petaluma">Petaluma</option>
+                            <option value="Academico">Academico</option>
+                        </select>
+                    </div>
+                )}
+
                 {/* VexFlow Renderer */}
                 <VexFlowRenderer
                     score={intermediateScore}
                     onRenderComplete={handleRenderComplete}
                     darkMode={darkMode}
+                    musicFont={musicFont}
                 />
 
                 <div ref={cursorRef} className="absolute pointer-events-none z-[1000]" style={{ display: 'none', width: '2px', backgroundColor: '#10B981', borderRadius: '1px', opacity: 0.85, transition: 'transform 0.05s linear' }} />
