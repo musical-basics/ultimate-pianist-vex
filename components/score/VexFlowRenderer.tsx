@@ -345,7 +345,10 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                                 const mod = m as any
                                 if (mod.getCategory?.() === 'articulations' || mod.constructor?.name === 'Articulation') {
                                     // Position: 3 = ABOVE, 4 = BELOW
-                                    mod.setPosition(stemDir === 1 ? 4 : 3)
+                                    const pos = stemDir === 1 ? 4 : 3
+                                    mod.setPosition(pos)
+                                    // Normalize distance from notehead (positive = down, negative = up)
+                                    mod.setYShift(pos === 4 ? 2 : -2)
                                 }
                             }
                         } catch { /* ignore */ }
