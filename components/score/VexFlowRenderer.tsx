@@ -429,10 +429,12 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                                 // Read actual rendered positions
                                 const xPositions: number[] = []
                                 const tickValues: number[] = []
+                                const noteIds: string[] = []
                                 for (const t of tickables) {
                                     xPositions.push(t.getAbsoluteX())
                                     const ticks = (t as any).getTicks?.()?.value?.() ?? 2048
                                     tickValues.push(ticks)
+                                    noteIds.push(t.getAttribute('id') as string || '')
                                 }
 
                                 const firstX = xPositions[0]
@@ -442,8 +444,7 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
 
                                 const totalTicks = tickValues.reduce((s, t) => s + t, 0)
 
-                                // Log current vs target positions
-                                console.log(`[TUPLET-SPACE] M${measureNumber} current positions: ${xPositions.map((x, i) => `t=${tickValues[i]}@x=${x.toFixed(0)}`).join(', ')}`)
+                                console.log(`[TUPLET-SPACE] M${measureNumber} notes: ${noteIds.map((id, i) => `${id}:t=${tickValues[i]}@x=${xPositions[i].toFixed(0)}`).join(', ')}`)
 
                                 // Calculate proportional target positions
                                 let accumulated = 0
@@ -454,14 +455,18 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
 
                                     if (Math.abs(shift) < 1) continue
 
-                                    // Find the SVG element for this note and translate it
-                                    const noteEl = (tickables[i] as any).getSVGElement?.() ||
-                                        (tickables[i] as any).getAttribute?.('el') ||
-                                        svgEl.getElementById((tickables[i] as any).getAttribute?.('id') || '')
-                                    if (noteEl) {
-                                        const existing = noteEl.getAttribute('transform') || ''
-                                        noteEl.setAttribute('transform', `${existing} translate(${shift.toFixed(1)}, 0)`)
-                                        console.log(`[TUPLET-SPACE] M${measureNumber} shifted note ${i}: ${shift.toFixed(1)}px`)
+                                    // Find SVG group by id attribute (set via staveNote.setAttribute('id', note.vfId))
+                                    const noteId = noteIds[i]
+                                    if (noteId) {
+                                        const el = svgEl.querySelector(`#${CSS.escape(noteId)}`) ||
+                                            svgEl.querySelector(`[id="${noteId}"]`)
+                                        if (el) {
+                                            const existing = el.getAttribute('transform') || ''
+                                            el.setAttribute('transform', `${existing} translate(${shift.toFixed(1)}, 0)`)
+                                            console.log(`[TUPLET-SPACE] M${measureNumber} shifted ${noteId}: ${shift.toFixed(1)}px`)
+                                        } else {
+                                            console.warn(`[TUPLET-SPACE] M${measureNumber} SVG element not found for id: ${noteId}`)
+                                        }
                                     }
                                 }
                             } catch (e) { console.warn(`[TUPLET-SPACE] M${measureNumber} error:`, e) }
