@@ -434,7 +434,7 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                                     // Adjust position to compensate for scale origin
                                     const x = parseFloat(textEl.getAttribute('x') || '0')
                                     textEl.setAttribute('x', String(x / 0.65))
-                                    textEl.setAttribute('y', String((currentY + 5) / 0.65))
+                                    textEl.setAttribute('y', String((currentY + 14) / 0.65))
                                     console.log(`[TUPLET-NUM] M${measureNumber} applied scale(0.65), adjusted x/y`)
                                 }
                             }
