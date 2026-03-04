@@ -285,8 +285,10 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                     }
 
                     // Flush any unclosed tuplet at end of voice
-                    // Flush any unclosed tuplet at end of voice
-                    if (currentTupletNotes && currentTupletNotes.length > 0) {
+                    // Only flush unclosed tuplets with 2+ notes
+                    // Single-note unclosed tuplets are cross-measure starts (e.g. M16 Voice 1)
+                    // that would produce a misplaced "3" over the wrong notes
+                    if (currentTupletNotes && currentTupletNotes.length >= 2) {
                         measureTuplets.push({
                             notes: currentTupletNotes,
                             actual: currentTupletActual,
