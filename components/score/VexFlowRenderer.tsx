@@ -219,6 +219,11 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                         vfNotes.push(staveNote)
 
                         // Tuplet tracking
+                        if (note.tupletActual || note.tupletStart || note.tupletStop) {
+                            if (mIdx <= 4) {
+                                console.log(`[TUPLET-TRACK] M${measureNumber} note=${note.keys[0]} tupletStart=${note.tupletStart} tupletStop=${note.tupletStop} tupletActual=${note.tupletActual} tupletNormal=${note.tupletNormal} currentTupletNotes=${currentTupletNotes?.length ?? 'null'}`)
+                            }
+                        }
                         if (note.tupletStart) {
                             currentTupletNotes = [staveNote]
                             currentTupletActual = note.tupletActual || 3
