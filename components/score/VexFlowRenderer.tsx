@@ -409,11 +409,26 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                     } catch { /* ignore */ }
                 })
 
-                // Format all voices to their staves for cross-stave X alignment
-                // formatToStave uses the stave's actual geometry for proper beat alignment
-                voicesByStave.forEach((voices, stave) => {
-                    formatter.formatToStave(voices, stave)
+                // Synchronize note start X across all staves so beats align vertically
+                // (prevents clef changes, key sigs, grace notes from offsetting one stave)
+                const staves = Object.values(staveMap)
+                const maxNoteStartX = Math.max(...staves.map(s => {
+                    try { return s.getNoteStartX() } catch { return 0 }
+                }))
+                staves.forEach(s => {
+                    try {
+                        if (s.getNoteStartX() < maxNoteStartX) {
+                            s.setNoteStartX(maxNoteStartX)
+                        }
+                    } catch { /* ignore */ }
                 })
+
+                // Format all voices together using the available width after decorations
+                const availableWidth = Math.max(
+                    staves[0]?.getNoteEndX() - maxNoteStartX,
+                    STAVE_WIDTH - 60
+                )
+                formatter.format(vfVoices, availableWidth)
 
                 // Post-format: reposition articulations based on resolved stem direction
                 vfVoices.forEach(v => {
