@@ -468,13 +468,16 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                             const tupletData = measureTuplets[tIdx]
                             let centerX = 0
                             if (tupletData && tupletData.notes.length >= 3) {
-                                // Use the middle note's X position directly
+                                // Use the middle note's visual X (absoluteX + xShift)
                                 const midIdx = Math.floor(tupletData.notes.length / 2)
-                                centerX = tupletData.notes[midIdx].getAbsoluteX()
+                                const midNote = tupletData.notes[midIdx]
+                                centerX = midNote.getAbsoluteX() + ((midNote as any).getXShift?.() ?? 0)
                             } else if (tupletData && tupletData.notes.length > 0) {
-                                const firstNoteX = tupletData.notes[0].getAbsoluteX()
-                                const lastNoteX = tupletData.notes[tupletData.notes.length - 1].getAbsoluteX()
-                                centerX = (firstNoteX + lastNoteX) / 2
+                                const first = tupletData.notes[0]
+                                const last = tupletData.notes[tupletData.notes.length - 1]
+                                const firstVisualX = first.getAbsoluteX() + ((first as any).getXShift?.() ?? 0)
+                                const lastVisualX = last.getAbsoluteX() + ((last as any).getXShift?.() ?? 0)
+                                centerX = (firstVisualX + lastVisualX) / 2
                             }
 
                             const textCountBefore = svgEl ? svgEl.querySelectorAll('text').length : 0
