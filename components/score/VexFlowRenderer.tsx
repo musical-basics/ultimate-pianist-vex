@@ -417,28 +417,30 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                 })
 
                 // Post-render: shrink tuplet numbers via SVG DOM manipulation
-                if (vfTuplets.length > 0) {
+                if (vfTuplets.length > 0 && containerRef.current) {
                     try {
-                        const svgEl = (context as any).svg || (context as any).element
+                        const svgEl = containerRef.current.querySelector('svg')
                         if (svgEl) {
-                            // Find all text elements that contain just a number (tuplet numbers)
+                            // VexFlow renders tuplet numbers as <text> elements
                             const textEls = svgEl.querySelectorAll('text')
+                            console.log(`[TUPLET-SVG] M${measureNumber} found ${textEls.length} text elements in SVG`)
                             for (const textEl of textEls) {
                                 const content = textEl.textContent?.trim()
                                 if (content && /^\d+$/.test(content) && parseInt(content) <= 9) {
-                                    // Check if this is likely a tuplet number by checking nearby context
-                                    const currentSize = parseFloat(textEl.getAttribute('font-size') || '0')
+                                    const currentSize = parseFloat(textEl.getAttribute('font-size') || textEl.style.fontSize || '0')
+                                    console.log(`[TUPLET-SVG] M${measureNumber} text="${content}" font-size=${currentSize} font-family=${textEl.getAttribute('font-family') || 'N/A'}`)
                                     if (currentSize >= 12) {
                                         textEl.setAttribute('font-size', '10')
-                                        // Move it down closer to the beam
                                         const currentY = parseFloat(textEl.getAttribute('y') || '0')
                                         textEl.setAttribute('y', String(currentY + 6))
-                                        console.log(`[TUPLET-SVG] M${measureNumber} resized text "${content}" from ${currentSize}px → 10px, y: ${currentY} → ${currentY + 6}`)
+                                        console.log(`[TUPLET-SVG] M${measureNumber} resized "${content}": ${currentSize}→10px, y:${currentY}→${currentY + 6}`)
                                     }
                                 }
                             }
+                        } else {
+                            console.warn(`[TUPLET-SVG] M${measureNumber} no SVG element found in container`)
                         }
-                    } catch { /* ignore */ }
+                    } catch (e) { console.warn('[TUPLET-SVG] error:', e) }
                 }
             }
 
