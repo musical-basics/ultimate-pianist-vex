@@ -58,9 +58,11 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
     // Load music font (VexFlow v5 requires explicit font loading)
     // Reset fontsLoaded on every change so renderScore waits for the new font
     useEffect(() => {
+        console.log('[FONT DEBUG] useEffect fired, musicFont prop =', JSON.stringify(musicFont))
         setFontsLoaded(false)
         VexFlow.loadFonts(musicFont).then(() => {
             VexFlow.setFonts(musicFont)
+            console.log('[FONT DEBUG] Font loaded & set:', JSON.stringify(musicFont), 'VexFlow.getFonts():', VexFlow.getFonts())
             setFontsLoaded(true)
         }).catch(() => {
             console.warn('[VEXFLOW] Font loading failed, using defaults')
@@ -70,6 +72,7 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
 
     const renderScore = useCallback(() => {
         if (!score || !containerRef.current || score.measures.length === 0 || !fontsLoaded) return
+        console.log('[FONT DEBUG] renderScore firing, musicFont =', JSON.stringify(musicFont), 'VexFlow.getFonts():', VexFlow.getFonts())
 
         // Clear previous render
         containerRef.current.innerHTML = ''

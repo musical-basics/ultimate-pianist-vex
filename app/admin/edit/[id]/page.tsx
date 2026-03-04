@@ -81,6 +81,7 @@ export default function AdminEditor() {
                     if (data.beat_anchors) setBeatAnchors(data.beat_anchors)
                     if (data.is_level2) setIsLevel2Mode(data.is_level2)
                     if (data.subdivision) setSubdivision(data.subdivision)
+                    console.log('[FONT DEBUG] DB returned music_font:', JSON.stringify(data.music_font), 'type:', typeof data.music_font)
                     if (data.music_font) setMusicFont(data.music_font)
                 }
             } catch (err) {
@@ -112,6 +113,7 @@ export default function AdminEditor() {
     const handleSave = async () => {
         try {
             setSaving(true)
+            console.log('[FONT DEBUG] Saving music_font:', JSON.stringify(musicFont))
             await updateConfigAction(configId, {
                 title, anchors, beat_anchors: beatAnchors,
                 subdivision, is_level2: isLevel2Mode,
