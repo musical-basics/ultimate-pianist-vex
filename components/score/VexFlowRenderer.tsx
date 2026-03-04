@@ -197,11 +197,6 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                         ? (voice.voiceIndex === Math.min(...staff.voices.map(v => v.voiceIndex)) ? 1 : -1)
                         : undefined
 
-                    // DEBUG: Log multi-voice detection
-                    if (measureNumber >= 12 && measureNumber <= 15) {
-                        console.log(`[STEM-DEBUG] M${measureNumber} staff${staff.staffIndex} voice${voice.voiceIndex}: isMultiVoice=${isMultiVoice}, voices=[${staff.voices.map(v => v.voiceIndex)}], stemDir=${stemDir}, noteCount=${voice.notes.length}, firstKey=${voice.notes[0]?.keys[0]}`)
-                    }
-
                     const vfNotes: StaveNote[] = []
                     const beamableNotes: StaveNote[] = []
 
@@ -323,7 +318,13 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                         try {
                             // Use generous beam groups to avoid splitting across beat boundaries
                             const groups = [new Fraction(currentTimeSigNum, currentTimeSigDen)]
-                            measureBeams.push(...Beam.generateBeams(beamableNotes, { groups }))
+                            // For multi-voice, force beam stem direction to match voice
+                            const beamOpts: any = { groups }
+                            if (stemDir !== undefined) {
+                                beamOpts.stemDirection = stemDir
+                                beamOpts.maintainStemDirections = true
+                            }
+                            measureBeams.push(...Beam.generateBeams(beamableNotes, beamOpts))
                         } catch { /* ignore */ }
                     }
                 }
