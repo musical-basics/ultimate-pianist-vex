@@ -58,20 +58,27 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
     // Preload ALL music fonts once on mount (VexFlow v5 requires explicit font loading)
     useEffect(() => {
         console.log('[FONT DEBUG] Preloading all VexFlow fonts...')
-        VexFlow.loadFonts('Bravura', 'Gonville', 'Petaluma', 'Academico').then(() => {
-            console.log('[FONT DEBUG] All fonts preloaded')
-            setFontsLoaded(true)
-        }).catch(() => {
-            console.warn('[VEXFLOW] Font preloading failed, using defaults')
-            setFontsLoaded(true) // proceed anyway with fallback fonts
-        })
+        VexFlow.loadFonts('Bravura', 'Gonville', 'Petaluma', 'Academico')
+            .then(() => document.fonts.ready)  // Wait for browser to fully register fonts
+            .then(() => {
+                const fontNames = ['Bravura', 'Gonville', 'Petaluma', 'Academico']
+                for (const f of fontNames) {
+                    const available = document.fonts.check(`30px "${f}"`)
+                    console.log(`[FONT DEBUG] Font "${f}" available:`, available)
+                }
+                setFontsLoaded(true)
+            }).catch(() => {
+                console.warn('[VEXFLOW] Font preloading failed, using defaults')
+                setFontsLoaded(true)
+            })
     }, [])
 
     const renderScore = useCallback(() => {
         if (!score || !containerRef.current || score.measures.length === 0 || !fontsLoaded) return
         // Set the active font synchronously BEFORE creating any VexFlow objects
         VexFlow.setFonts(musicFont)
-        console.log('[FONT DEBUG] renderScore: musicFont =', JSON.stringify(musicFont), 'getFonts():', VexFlow.getFonts())
+        const fontAvailable = document.fonts.check(`30px "${musicFont}"`)
+        console.log('[FONT DEBUG] renderScore: musicFont =', JSON.stringify(musicFont), 'fontAvailable:', fontAvailable, 'getFonts():', VexFlow.getFonts())
 
         // Clear previous render
         containerRef.current.innerHTML = ''
@@ -83,11 +90,6 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
         // Create SVG renderer
         const renderer = new Renderer(containerRef.current, Renderer.Backends.SVG)
         renderer.resize(totalWidth, SYSTEM_HEIGHT)
-        // Check what font-family the SVG actually got
-        const svgEl = containerRef.current.querySelector('svg')
-        if (svgEl) {
-            console.log('[FONT DEBUG] SVG font-family attr:', svgEl.getAttribute('font-family'))
-        }
         rendererRef.current = renderer
 
         const context = renderer.getContext() as RenderContext
