@@ -408,14 +408,21 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                                 const mod = m as any
                                 if (mod.getCategory?.() === 'articulations' || mod.constructor?.name === 'Articulation') {
+                                    // Fermatas always go above the staff (position 3)
+                                    // VexFlow uses 'a@' prefix for fermata codes: a@a, a@u, a@s, etc.
+                                    const artType = mod.type ?? ''
+                                    const isFermata = typeof artType === 'string' && artType.startsWith('a@')
+
                                     let pos: number
-                                    if (isMulti) {
+                                    if (isFermata) {
+                                        pos = 3 // always above
+                                    } else if (isMulti) {
                                         pos = stemDir === 1 ? 3 : 4
                                     } else {
                                         pos = stemDir === 1 ? 4 : 3
                                     }
                                     mod.setPosition(pos)
-                                    mod.setYShift(pos === 4 ? 2 : -2)
+                                    mod.setYShift(isFermata ? -2 : (pos === 4 ? 2 : -2))
                                 }
                             }
                         } catch { /* ignore */ }
