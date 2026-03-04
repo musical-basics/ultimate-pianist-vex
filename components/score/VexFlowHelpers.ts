@@ -58,20 +58,11 @@ export function isBeamable(duration: string): boolean {
 
 /**
  * Create and attach an articulation modifier to a StaveNote.
- * Positions articulations close to the notehead:
- *  - Above for stem-up notes, below for stem-down notes.
+ * VexFlow automatically positions articulations on the notehead side:
+ *  - Below for stem-up notes, above for stem-down notes.
  */
 export function addArticulation(staveNote: StaveNote, artCode: string): void {
     const art = new Articulation(artCode)
-    // Position: 3 = ABOVE, 4 = BELOW (VexFlow Modifier.Position)
-    // By default VexFlow often places articulations far from the note.
-    // We let autoStem handle it, but explicitly set position based on art type.
-    // For staccato (a.) and tenuto (a-), place near notehead.
-    try {
-        // VexFlow auto-positions based on stem direction when position is set
-        art.setPosition(3) // ABOVE by default, VexFlow adjusts for stem direction
-    } catch {
-        // Older VexFlow versions may not support setPosition — safe fallback
-    }
+    // Let VexFlow auto-position based on stem direction (notehead side)
     staveNote.addModifier(art)
 }
