@@ -329,6 +329,30 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                 voicesByStave.forEach(voices => formatter.joinVoices(voices))
                 // Format all voices together for cross-stave X alignment
                 formatter.format(vfVoices, STAVE_WIDTH - 40)
+
+                // DEBUG: Log articulation positions AFTER formatting (stem direction now resolved)
+                if (mIdx <= 2) { // Only log first 3 measures to avoid spam
+                    vfVoices.forEach((v, vi) => {
+                        const tickables = v.getTickables()
+                        tickables.forEach((t, ti) => {
+                            const sn = t as StaveNote
+                            try {
+                                const stemDir = sn.getStemDirection() // 1 = up, -1 = down
+                                const mods = sn.getModifiers()
+                                const arts = mods.filter((m: any) => m.getCategory?.() === 'articulations' || m.constructor?.name === 'Articulation')
+                                if (arts.length > 0) {
+                                    console.log(`[ART-DEBUG] M${measureNumber} voice${vi} note${ti}: stemDir=${stemDir}, arts=${arts.length}`,
+                                        arts.map((a: any) => ({
+                                            position: a.getPosition?.(),
+                                            type: a.type || a.articulation,
+                                        }))
+                                    )
+                                }
+                            } catch (e) { /* ignore */ }
+                        })
+                    })
+                }
+
                 vfVoices.forEach(v => v.draw(context, voiceStaveMap.get(v)!))
                 measureBeams.forEach(b => b.setContext(context).draw())
 
