@@ -76,3 +76,96 @@ export function addArticulation(staveNote: StaveNote, artCode: string): void {
     // Let VexFlow auto-position based on stem direction (notehead side)
     staveNote.addModifier(art)
 }
+
+// ─── Tuplet Helpers ────────────────────────────────────────────────
+
+export type TupletData = {
+    notes: StaveNote[]
+    actual: number
+    normal: number
+}
+
+/**
+ * Convert a VexFlow duration string to beats (in quarter-note units).
+ * e.g. 'w'=4, 'h'=2, 'q'=1, '8'=0.5, '16'=0.25
+ */
+export function durationToBeats(dur: string): number {
+    const base = dur.replace(/[rd]/g, '')
+    switch (base) {
+        case 'w': return 4
+        case 'h': return 2
+        case 'q': return 1
+        case '8': return 0.5
+        case '16': return 0.25
+        case '32': return 0.125
+        default: return 1
+    }
+}
+
+/**
+ * Calculate total beat value for a voice's notes, accounting for dots
+ * and existing tuplet time-modifications.
+ */
+export function calculateVoiceDuration(notes: IntermediateNote[]): number {
+    let totalBeats = 0
+    for (const n of notes) {
+        let beats = durationToBeats(n.duration)
+        // Apply dots: each dot adds half of the previous addition
+        let dotValue = beats / 2
+        for (let d = 0; d < n.dots; d++) {
+            beats += dotValue
+            dotValue /= 2
+        }
+        // If note already has tuplet time-modification, apply it
+        if (n.tupletActual && n.tupletNormal) {
+            beats = beats * n.tupletNormal / n.tupletActual
+        }
+        totalBeats += beats
+    }
+    return totalBeats
+}
+
+/**
+ * Heuristic triplet detection: detects groups of 3 consecutive eighth notes
+ * that aren't marked as tuplets in the MusicXML, but MUST be triplets because
+ * the voice's total note values exceed the measure capacity.
+ *
+ * Returns array of newly detected tuplet groups to add.
+ */
+export function detectHeuristicTuplets(
+    voiceNotes: IntermediateNote[],
+    vfNotes: StaveNote[],
+    existingTuplets: TupletData[],
+    timeSigNum: number,
+    timeSigDen: number,
+    measureNumber: number,
+): TupletData[] {
+    const measureCapacity = timeSigNum * (4 / timeSigDen)
+    const totalBeats = calculateVoiceDuration(voiceNotes)
+
+    // Only detect triplets if voice overflows the measure
+    if (totalBeats <= measureCapacity + 0.01) return []
+
+    const detected: TupletData[] = []
+    const tupletNoteIds = new Set<StaveNote>()
+    existingTuplets.forEach(t => t.notes.forEach(n => tupletNoteIds.add(n)))
+
+    for (let ni = 0; ni <= voiceNotes.length - 3; ni++) {
+        const n0 = voiceNotes[ni]
+        const n1 = voiceNotes[ni + 1]
+        const n2 = voiceNotes[ni + 2]
+        const allEighths = n0.duration === '8' && n1.duration === '8' && n2.duration === '8'
+        const noRests = !n0.isRest && !n1.isRest && !n2.isRest
+        const notAlreadyTuplet = !tupletNoteIds.has(vfNotes[ni]) && !tupletNoteIds.has(vfNotes[ni + 1]) && !tupletNoteIds.has(vfNotes[ni + 2])
+        const noTupletFlags = !n0.tupletStart && !n0.tupletStop && !n1.tupletStart && !n1.tupletStop && !n2.tupletStart && !n2.tupletStop
+
+        if (allEighths && noRests && notAlreadyTuplet && noTupletFlags) {
+            const tripletNotes = [vfNotes[ni], vfNotes[ni + 1], vfNotes[ni + 2]]
+            detected.push({ notes: tripletNotes, actual: 3, normal: 2 })
+            tripletNotes.forEach(n => tupletNoteIds.add(n))
+            console.log(`[TUPLET-HEURISTIC] M${measureNumber} detected triplet (overflow: ${totalBeats.toFixed(2)} > ${measureCapacity}) at notes ${ni}-${ni + 2}`)
+        }
+    }
+
+    return detected
+}
