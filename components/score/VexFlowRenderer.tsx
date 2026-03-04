@@ -443,7 +443,8 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                             let accumulated = 0
                             for (let i = 0; i < tickables.length; i++) {
                                 const targetX = firstX + (accumulated / totalTicks) * totalWidth
-                                const shift = targetX - relPositions[i]
+                                // Dampen shift to 65% — pure proportional is too tight for triplets
+                                const shift = (targetX - relPositions[i]) * 0.65
                                 accumulated += tickValues[i]
 
                                 if (Math.abs(shift) >= 1) {
@@ -467,9 +468,15 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                             const tupletData = measureTuplets[tIdx]
                             let centerX = 0
                             if (tupletData && tupletData.notes.length > 0) {
-                                const firstNoteX = tupletData.notes[0].getAbsoluteX()
-                                const lastNoteX = tupletData.notes[tupletData.notes.length - 1].getAbsoluteX()
-                                centerX = (firstNoteX + lastNoteX) / 2
+                                // Use middle note for centering (or midpoint of first/last)
+                                if (tupletData.notes.length >= 3) {
+                                    const midIdx = Math.floor(tupletData.notes.length / 2)
+                                    centerX = tupletData.notes[midIdx].getAbsoluteX()
+                                } else {
+                                    const firstNoteX = tupletData.notes[0].getAbsoluteX()
+                                    const lastNoteX = tupletData.notes[tupletData.notes.length - 1].getAbsoluteX()
+                                    centerX = (firstNoteX + lastNoteX) / 2
+                                }
                             }
 
                             const textCountBefore = svgEl ? svgEl.querySelectorAll('text').length : 0
