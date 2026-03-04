@@ -455,11 +455,12 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
 
                                     if (Math.abs(shift) < 1) continue
 
-                                    // Find SVG group by id attribute (set via staveNote.setAttribute('id', note.vfId))
+                                    // Find SVG group by id attribute
+                                    // VexFlow's openGroup() calls prefix(id) which adds 'vf-'
                                     const noteId = noteIds[i]
                                     if (noteId) {
-                                        const el = svgEl.querySelector(`#${CSS.escape(noteId)}`) ||
-                                            svgEl.querySelector(`[id="${noteId}"]`)
+                                        const svgId = `vf-${noteId}` // VexFlow adds 'vf-' prefix
+                                        const el = svgEl.querySelector(`[id="${svgId}"]`)
                                         if (el) {
                                             const existing = el.getAttribute('transform') || ''
                                             el.setAttribute('transform', `${existing} translate(${shift.toFixed(1)}, 0)`)
