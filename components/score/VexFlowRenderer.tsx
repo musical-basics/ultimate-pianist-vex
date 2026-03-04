@@ -186,14 +186,22 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                 const stave = staveMap[staff.staffIndex]
                 if (!stave) continue
 
+                const isMultiVoice = staff.voices.length > 1
+
                 for (const voice of staff.voices) {
                     if (voice.notes.length === 0) continue
+
+                    // Multi-voice: first voice stems UP (1), second voice stems DOWN (-1)
+                    // Single voice: undefined → autoStem
+                    const stemDir = isMultiVoice
+                        ? (voice.voiceIndex === Math.min(...staff.voices.map(v => v.voiceIndex)) ? 1 : -1)
+                        : undefined
 
                     const vfNotes: StaveNote[] = []
                     const beamableNotes: StaveNote[] = []
 
                     for (const note of voice.notes) {
-                        const staveNote = createStaveNote(note, staff.staffIndex)
+                        const staveNote = createStaveNote(note, staff.staffIndex, stemDir)
 
                         for (let ki = 0; ki < note.accidentals.length; ki++) {
                             const acc = note.accidentals[ki]
