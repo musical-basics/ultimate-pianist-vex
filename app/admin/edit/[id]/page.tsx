@@ -85,21 +85,22 @@ export default function AdminEditor() {
     }, [])
 
     // ─── Font re-apply when toggles cause VexFlow re-render ──
-    const prevPreviewRef = useRef(previewEffects)
-    const prevRevealRef = useRef(revealMode)
-    const prevDarkRef = useRef(darkMode)
+    const prevTogglesRef = useRef({ previewEffects, revealMode, darkMode, popEffect, jumpEffect, glowEffect, highlightNote })
     useEffect(() => {
-        const changed = prevPreviewRef.current !== previewEffects
-            || prevRevealRef.current !== revealMode
-            || prevDarkRef.current !== darkMode
-        prevPreviewRef.current = previewEffects
-        prevRevealRef.current = revealMode
-        prevDarkRef.current = darkMode
+        const prev = prevTogglesRef.current
+        const changed = prev.previewEffects !== previewEffects
+            || prev.revealMode !== revealMode
+            || prev.darkMode !== darkMode
+            || prev.popEffect !== popEffect
+            || prev.jumpEffect !== jumpEffect
+            || prev.glowEffect !== glowEffect
+            || prev.highlightNote !== highlightNote
+        prevTogglesRef.current = { previewEffects, revealMode, darkMode, popEffect, jumpEffect, glowEffect, highlightNote }
         if (changed && savedFontRef.current) {
             setMusicFont('')
             setTimeout(() => setMusicFont(savedFontRef.current), 1000)
         }
-    }, [previewEffects, revealMode, darkMode])
+    }, [previewEffects, revealMode, darkMode, popEffect, jumpEffect, glowEffect, highlightNote])
 
     useEffect(() => {
         const load = async () => {
