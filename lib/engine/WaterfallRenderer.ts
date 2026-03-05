@@ -253,19 +253,20 @@ export class WaterfallRenderer {
 
             if (active) this.activeThisFrame[note.pitch] = 1
 
-            // ── Width scaling by velocity ──
-            // White keys: 50%→100%, Black keys: 70%→100%
+            // ── Width scaling by velocity (squared for dramatic contrast) ──
+            // White keys: 30%→100%, Black keys: 50%→100%
             const velClamped = Math.max(0, Math.min(127, note.velocity))
             const velT = velClamped <= 20 ? 0 : velClamped >= 100 ? 1 : (velClamped - 20) / 80
-            const minScale = isBlackKey(note.pitch) ? 0.7 : 0.5
-            const widthScale = minScale + (1 - minScale) * velT
+            const velTSq = velT * velT // squared curve for more dramatic difference
+            const minScale = isBlackKey(note.pitch) ? 0.5 : 0.3
+            const widthScale = minScale + (1 - minScale) * velTSq
             const w = Math.max(4, Math.round(fullW * widthScale))
             const baseX = Math.round(this.keyX[note.pitch]) + Math.round((fullW - w) / 2) // center on key
 
-            // Calculate inner border thickness based on velocity
+            // Calculate inner border thickness based on velocity (squared)
             const maxThickness = Math.min(w, h) / 2
-            // Maps velocity 0-127 → thickness from 2px to full fill
-            const thickness = 2 + (note.velocity / 127) * (maxThickness - 2)
+            // Maps velocity: soft → 1px thin outline, loud → full fill
+            const thickness = 1 + velTSq * (maxThickness - 1)
 
             // Clear and redraw this Graphics object
             g.clear()
