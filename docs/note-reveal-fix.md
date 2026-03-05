@@ -65,4 +65,36 @@ Settings were lost on page refresh — `previewEffects`, `revealMode`, `darkMode
 **Fix:** Added Zustand `persist` middleware to `lib/store.ts`. UI preferences (14 settings) are saved to localStorage under `ultimate-pianist-settings`. Transient state (playback, MIDI data, anchors) is excluded via `partialize`.
 
 ### Persisted Settings
-`revealMode`, `darkMode`, `highlightNote`, `glowEffect`, `popEffect`, `jumpEffect`, `previewEffects`, `showCursor`, `showScore`, `showWaterfall`, `velocityKeyColor`, `noteGlow`, `cursorPosition`, `curtainLookahead`
+`revealMode`, `darkMode`, `highlightNote`, `glowEffect`, `popEffect`, `jumpEffect`, `previewEffects`, `showCursor`, `showScore`, `showWaterfall`, `velocityKeyColor`, `noteGlow`, `cursorPosition`, `curtainLookahead`, `dynamicColor`
+
+## MIDI Velocity Baking Timing Issue
+
+### Bug
+After implementing MIDI velocity → score highlight coloring, the `[MidiMatcher] Baked: 414 matched` log showed matching succeeded, but notes still used the fallback green (`#10B981`). Debug logging revealed `vel=undefined` on the NoteData at highlight time.
+
+### Root Cause
+The `bakeMidiOntoNotes()` function was called in a `useEffect` with `[isLoaded, parsedMidi, anchors, beatAnchors]` dependencies. It ran successfully on the first render. However, VexFlow's font delay mechanism triggers a **second render** ~1 second later (to apply the correct music font). This second render creates entirely **new** `NoteData` objects in `noteMap.current`, but the baking useEffect does NOT re-fire because none of its dependencies changed (`isLoaded` was already `true`, and `parsedMidi`/`anchors` didn't change).
+
+### Failed Fixes
+1. **useEffect-only baking** — only fires on dependency changes, not on re-renders that replace the ref's contents
+
+### Solution
+Call `bakeMidiOntoNotes()` directly inside `handleRenderComplete` (after noteMap is populated) using refs for `parsedMidi`/`anchors`/`beatAnchors` so the callback always has latest values. The useEffect is retained to handle re-baking when anchors or MIDI data changes.
+
+**Key pattern:** When data is stored in a `useRef` (like `noteMap`), React effects won't detect when the ref's contents are replaced. Direct calls in the completion callback are needed.
+
+## Grace Note Fly-In Recurrence
+
+### Bug
+Grace notes animated ("flew in") from the right side of the screen when revealed in NOTE mode.
+
+### Root Cause
+CSS `transition: 'transform 0.1s ease-out, filter 0.1s'` was applied to ALL note `<g>` elements (VexFlowRenderer.tsx line 664). Grace notes are positioned via SVG `transform` attribute (set by VexFlow's grace note rendering). When NOTE reveal mode changes their `opacity` from 0→1, the browser also animates any pending transform changes, causing the fly-in effect.
+
+This was a **recurrence** of a previously fixed bug. The original fix removed `opacity` from the transition list, which solved the problem at that time. But the `transform` transition remained and became the new culprit as the codebase evolved.
+
+### Failed Fixes
+1. **Removing opacity transition** — fixed original occurrence, but `transform` transition caused the same visual bug to recur
+
+### Solution
+Detect grace note elements via `element.closest('.vf-gracenotegroup')` and skip the `transform` CSS transition for those elements entirely. Regular notes still get the transition for smooth pop/jump/glow effects.
