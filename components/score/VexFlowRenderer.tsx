@@ -653,7 +653,7 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
             const cLeft = containerRef.current.getBoundingClientRect().left
 
             let populatedCount = 0, missingCount = 0
-            allNoteData.forEach((notes) => {
+            allNoteData.forEach((notes, measureNum) => {
                 for (const note of notes) {
                     if (!note.element) { missingCount++; continue }
                     populatedCount++
@@ -666,10 +666,13 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                     // cause them to 'fly in' when revealed. Skip transitions for:
                     // 1. Elements INSIDE a grace note group (checking UP the tree)
                     // 2. Elements that CONTAIN a grace note group (checking DOWN — main note with grace notes)
-                    const isGraceRelated = note.element.closest('.vf-gracenotegroup') !== null
-                        || note.element.querySelector('.vf-gracenotegroup') !== null
+                    const closestGrace = note.element.closest('.vf-gracenotegroup')
+                    const childGrace = note.element.querySelector('.vf-gracenotegroup')
+                    const isGraceRelated = closestGrace !== null || childGrace !== null
                     if (!isGraceRelated) {
                         note.element.style.transition = 'transform 0.1s ease-out, filter 0.1s'
+                    } else {
+                        console.log(`[GRACE DEBUG] M${measureNum} id=${note.id} closestGrace=${!!closestGrace} childGrace=${!!childGrace} classes=${(note.element.className as unknown as { baseVal?: string })?.baseVal || note.element.className}`)
                     }
 
                     if (note.pathsAndRects) {
@@ -680,6 +683,11 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
 
                     // Cache absoluteX for reveal mode calculations
                     note.absoluteX = note.element.getBoundingClientRect().left - cLeft
+
+                    // DEBUG: Log grace-related notes with their absoluteX
+                    if (isGraceRelated) {
+                        console.log(`[GRACE DEBUG] M${measureNum} id=${note.id} absoluteX=${note.absoluteX?.toFixed(0)} transition=${note.element.style.transition || 'NONE'}`)
+                    }
                 }
             })
             console.log(`[VFR DOM] Elements: populated=${populatedCount} missing=${missingCount}`)
