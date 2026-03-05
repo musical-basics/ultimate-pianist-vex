@@ -15,17 +15,48 @@ import {
 } from './pianoMetrics'
 import type { PlaybackManager } from './PlaybackManager'
 
-const TRACK_COLORS: number[] = [
-    0x22c55e, // Track 0: Green (right hand / treble)
-    0x3b82f6, // Track 1: Blue (left hand / bass)
-    0xf59e0b, // Track 2: Amber
-    0xef4444, // Track 3: Red
-    0xa855f7, // Track 4: Purple
-]
-const DEFAULT_COLOR = 0xa855f7
-
 const ACTIVE_ALPHA = 0.95
 const INACTIVE_ALPHA = 0.75
+
+/**
+ * Map velocity (0-127) to a rainbow hex color.
+ *   ≤ 20 → purple (hue 270)
+ *   ≥ 80 → red    (hue 0)
+ *   20..80 → rainbow from purple (270°) → blue → cyan → green → yellow → red (0°)
+ */
+function velocityToColor(velocity: number): number {
+    const v = Math.max(0, Math.min(127, velocity))
+    let hue: number
+    if (v <= 20) {
+        hue = 270
+    } else if (v >= 80) {
+        hue = 0
+    } else {
+        // Map 20..80 → hue 270..0 (descending through the rainbow)
+        const t = (v - 20) / (80 - 20) // 0..1
+        hue = 270 * (1 - t)
+    }
+    return hslToHex(hue, 85, 55)
+}
+
+function hslToHex(h: number, s: number, l: number): number {
+    const sn = s / 100
+    const ln = l / 100
+    const c = (1 - Math.abs(2 * ln - 1)) * sn
+    const x = c * (1 - Math.abs(((h / 60) % 2) - 1))
+    const m = ln - c / 2
+    let r = 0, g = 0, b = 0
+    if (h < 60) { r = c; g = x; b = 0 }
+    else if (h < 120) { r = x; g = c; b = 0 }
+    else if (h < 180) { r = 0; g = c; b = x }
+    else if (h < 240) { r = 0; g = x; b = c }
+    else if (h < 300) { r = x; g = 0; b = c }
+    else { r = c; g = 0; b = x }
+    const ri = Math.round((r + m) * 255)
+    const gi = Math.round((g + m) * 255)
+    const bi = Math.round((b + m) * 255)
+    return (ri << 16) | (gi << 8) | bi
+}
 
 export class WaterfallRenderer {
     private app: Application | null = null
@@ -228,7 +259,7 @@ export class WaterfallRenderer {
             if (Math.round(sprite.width) !== w) sprite.width = w
             if (Math.round(sprite.height) !== h) sprite.height = h
 
-            const color = TRACK_COLORS[note.trackId] ?? DEFAULT_COLOR
+            const color = velocityToColor(note.velocity)
             const active = time >= note.startTimeSec && time <= note.endTimeSec
 
             if (active) {
