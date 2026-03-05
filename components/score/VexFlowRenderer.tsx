@@ -324,15 +324,46 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                                 } catch { /* ignore */ }
                             }
 
-                            // FIX: Push data for ALL notes/rests so Note Reveal can hide/show them
+                            // Get SVG element reference directly from VexFlow's rendered output
+                            // (staveNote.el or attrs.el holds the SVG <g> after draw())
+                            let element: HTMLElement | null = null
+                            let pathsAndRects: HTMLElement[] | undefined
+                            try {
+                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                const sn = staveNote as any
+                                const el = sn.el || sn.attrs?.el
+                                if (el) {
+                                    const group = (el.closest?.('.vf-stavenote') as HTMLElement) || (el as HTMLElement)
+                                    element = group
+                                    pathsAndRects = Array.from(group.querySelectorAll('path, rect')) as HTMLElement[]
+                                }
+                            } catch { /* ignore */ }
+
+                            // Fallback: use VexFlow's auto-generated ID from the SVG
+                            if (!element && containerRef.current) {
+                                try {
+                                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                    const autoId = (staveNote as any).attrs?.id
+                                    if (autoId) {
+                                        const found = containerRef.current.querySelector(`[id="${autoId}"]`) as HTMLElement
+                                        if (found) {
+                                            const group = (found.closest('.vf-stavenote') as HTMLElement) || found
+                                            element = group
+                                            pathsAndRects = Array.from(group.querySelectorAll('path, rect')) as HTMLElement[]
+                                        }
+                                    }
+                                } catch { /* ignore */ }
+                            }
+
                             measureNoteData.push({
                                 id: note.vfId,
                                 measureIndex: measureNumber,
                                 timestamp: (note.beat - 1) / currentTimeSigNum,
                                 isRest: note.isRest,
                                 numerator: currentTimeSigNum,
-                                element: null,
+                                element,
                                 stemElement: null,
+                                pathsAndRects,
                             })
                         })
                     }
@@ -624,56 +655,35 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
             }
         }
 
-        // ── Post-render: populate DOM element references ──
+        // ── Post-render: configure CSS transforms + cache absoluteX ──
         requestAnimationFrame(() => {
             if (!containerRef.current) return
 
             const cLeft = containerRef.current.getBoundingClientRect().left
 
-            // DEBUG: Check what IDs exist in the SVG
-            const svgEl = containerRef.current.querySelector('svg')
-            if (svgEl) {
-                const allIds = Array.from(svgEl.querySelectorAll('[id]')).map(e => e.id)
-                const vfIds = allIds.filter(id => id.startsWith('vf-'))
-                console.log(`[VFR DOM] SVG has ${allIds.length} elements with id, ${vfIds.length} with vf- prefix`)
-                if (vfIds.length > 0) console.log('[VFR DOM] Sample vf-IDs:', vfIds.slice(0, 5))
-                if (vfIds.length === 0 && allIds.length > 0) console.log('[VFR DOM] Non-vf IDs sample:', allIds.slice(0, 5))
-            } else {
-                console.warn('[VFR DOM] No SVG element found!')
-            }
-
-            // Populate noteMap element references
-            let foundCount = 0, missCount = 0
-            const sampleMissIds: string[] = []
+            let populatedCount = 0, missingCount = 0
             allNoteData.forEach((notes) => {
                 for (const note of notes) {
-                    const el = containerRef.current?.querySelector(`[id="${note.id}"]`) as HTMLElement
-                    if (el) {
-                        const group = el.closest('.vf-stavenote') as HTMLElement || el
+                    if (!note.element) { missingCount++; continue }
+                    populatedCount++
 
-                        // FIX: Configure the <g> group for CSS transforms so stems don't detach
-                        group.style.transformBox = 'fill-box'
-                        group.style.transformOrigin = 'center bottom'
-                        group.style.transition = 'transform 0.1s ease-out, filter 0.1s, opacity 0.15s ease-out'
+                    // Configure the <g> group for CSS transforms so stems don't detach
+                    note.element.style.transformBox = 'fill-box'
+                    note.element.style.transformOrigin = 'center bottom'
+                    note.element.style.transition = 'transform 0.1s ease-out, filter 0.1s, opacity 0.15s ease-out'
 
-                        const pathsAndRects = Array.from(group.querySelectorAll('path, rect')) as HTMLElement[]
-                        pathsAndRects.forEach(p => {
-                            // Keep color transition smooth for children
+                    if (note.pathsAndRects) {
+                        note.pathsAndRects.forEach(p => {
                             p.style.transition = 'fill 0.1s, stroke 0.1s'
                         })
-
-                        note.element = group
-                        note.pathsAndRects = pathsAndRects
-                        note.absoluteX = group.getBoundingClientRect().left - cLeft
-                        foundCount++
-                    } else {
-                        missCount++
-                        if (sampleMissIds.length < 5) sampleMissIds.push(note.id)
                     }
+
+                    // Cache absoluteX for reveal mode calculations
+                    note.absoluteX = note.element.getBoundingClientRect().left - cLeft
                 }
             })
-            console.log(`[VFR DOM] Element lookup: found=${foundCount} missed=${missCount}`)
-            if (sampleMissIds.length > 0) console.log('[VFR DOM] Missed IDs sample:', sampleMissIds)
+            console.log(`[VFR DOM] Elements: populated=${populatedCount} missing=${missingCount}`)
+
             setIsRendered(true)
 
             // Fire callback with all rendering data
