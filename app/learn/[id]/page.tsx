@@ -34,6 +34,7 @@ export default function LearnPlayback() {
     const audioSynthRef = useRef<AudioSynth | null>(null)
     const displayRafRef = useRef<number>(0)
     const schedulerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+    const savedFontRef = useRef('')
 
     const isPlaying = useAppStore((s) => s.isPlaying)
     const setPlaying = useAppStore((s) => s.setPlaying)
@@ -46,10 +47,31 @@ export default function LearnPlayback() {
     const toggleLeftHand = useAppStore((s) => s.toggleLeftHand)
     const toggleRightHand = useAppStore((s) => s.toggleRightHand)
 
-    // ─── Hardcoded 2s loading overlay (hides font swap from students) ──
+    // ─── 2s loading overlay: fires on mount AND every tab-switch-back ──
     useEffect(() => {
-        const timer = setTimeout(() => setInitialLoading(false), 2000)
-        return () => clearTimeout(timer)
+        const triggerFontReload = () => {
+            // Reset font to blank so VexFlow uses its default during the overlay
+            setMusicFont('')
+            setInitialLoading(true)
+            // Re-apply saved font after 1s
+            if (savedFontRef.current) {
+                setTimeout(() => setMusicFont(savedFontRef.current), 1000)
+            }
+            // Hide overlay after 2s
+            setTimeout(() => setInitialLoading(false), 2000)
+        }
+
+        // Fire on mount
+        triggerFontReload()
+
+        // Fire when user switches back to this tab
+        const onVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                triggerFontReload()
+            }
+        }
+        document.addEventListener('visibilitychange', onVisibilityChange)
+        return () => document.removeEventListener('visibilitychange', onVisibilityChange)
     }, [])
 
     // ─── Load config ──────────────────────────────────────────────
@@ -63,6 +85,7 @@ export default function LearnPlayback() {
                     if (data.anchors) setAnchors(data.anchors)
                     if (data.beat_anchors) setBeatAnchors(data.beat_anchors)
                     if (data.music_font) {
+                        savedFontRef.current = data.music_font
                         setTimeout(() => setMusicFont(data.music_font!), 1000)
                     }
                 }
