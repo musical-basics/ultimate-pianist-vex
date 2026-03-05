@@ -169,10 +169,13 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
             const cLeft = containerRef.current.getBoundingClientRect().left
             let populatedCount = 0
 
-            // Collect beam & tie elements for NOTE reveal (they're outside .vf-stavenote groups)
+            // Collect ALL VexFlow SVG groups outside .vf-stavenote for NOTE reveal
+            // (beams, ties, curves, tuplets, slurs and other decorative elements)
             const beamTieEls: { el: HTMLElement, x: number, isRevealed?: boolean }[] = []
-            const beamsAndTies = containerRef.current.querySelectorAll('.vf-beam, .vf-stavetie, .vf-curve')
-            beamsAndTies.forEach(el => {
+            const extraGroups = containerRef.current.querySelectorAll(
+                'g[class*="vf-"]:not(.vf-stavenote):not(.vf-stave):not(.vf-clef):not(.vf-keysignature):not(.vf-timesignature)'
+            )
+            extraGroups.forEach(el => {
                 const htmlEl = el as HTMLElement
                 const rect = htmlEl.getBoundingClientRect()
                 // Use the LEFT edge of the beam/tie as its reveal position
@@ -500,6 +503,10 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
                             if (highlightNote) tFill = highlightColor
                             if (glowEffect) tFilter = `drop-shadow(0 0 6px ${shadowColor})`
                             tTransform = `scale(${popEffect ? 1.4 : 1}) translateY(${jumpEffect ? -10 : 0}px)`
+                            // Debug: log once per active note per measure change
+                            if (Math.random() < 0.05) {
+                                console.log(`[EFFECTS] note.timestamp=${note.timestamp.toFixed(3)} globalProgress=${globalProgress.toFixed(3)} highlightNote=${highlightNote} pathCount=${note.pathsAndRects?.length} elementTag=${note.element?.tagName}`)
+                            }
                         }
 
                         applyColor(note.element, tFill, note.pathsAndRects)
