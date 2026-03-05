@@ -19,23 +19,31 @@ const ACTIVE_ALPHA = 0.95
 const INACTIVE_ALPHA = 0.75
 
 /**
- * Map velocity (0-127) to a rainbow hex color.
- *   ≤ 20 → purple (hue 270)
- *   ≥ 80 → red    (hue 0)
- *   20..80 → rainbow from purple (270°) → blue → cyan → green → yellow → red (0°)
+ * 15-band velocity → rainbow color.
+ *   ≤ 20 → purple (band 0, hue 270)
+ *   ≥ 90 → red    (band 14, hue 0)
+ *   20..90 → 15 discrete bands stepping through the full rainbow
  */
+const VELOCITY_BANDS = 15
+const VEL_LOW = 20
+const VEL_HIGH = 90
+const VEL_RANGE = VEL_HIGH - VEL_LOW
+
 function velocityToColor(velocity: number): number {
     const v = Math.max(0, Math.min(127, velocity))
-    let hue: number
-    if (v <= 20) {
-        hue = 270
-    } else if (v >= 80) {
-        hue = 0
+    let band: number
+    if (v <= VEL_LOW) {
+        band = 0
+    } else if (v >= VEL_HIGH) {
+        band = VELOCITY_BANDS - 1
     } else {
-        // Map 20..80 → hue 270..0 (descending through the rainbow)
-        const t = (v - 20) / (80 - 20) // 0..1
-        hue = 270 * (1 - t)
+        band = Math.min(
+            VELOCITY_BANDS - 1,
+            Math.floor(((v - VEL_LOW) / VEL_RANGE) * VELOCITY_BANDS)
+        )
     }
+    // Hue descends from 270° (purple) to 0° (red) across 15 bands
+    const hue = 270 * (1 - band / (VELOCITY_BANDS - 1))
     return hslToHex(hue, 85, 55)
 }
 

@@ -135,12 +135,14 @@ export const MidiTimeline: React.FC<MidiTimelineProps> = ({
             const w = Math.max(2, note.durationSec * zoom)
             const y = (pitchRange.max - note.pitch) * ROW_HEIGHT
 
-            // Note color based on velocity — rainbow spectrum
+            // Note color based on velocity — 15-band rainbow spectrum
             const v = Math.max(0, Math.min(127, note.velocity))
-            let hue: number
-            if (v <= 20) hue = 270       // purple
-            else if (v >= 80) hue = 0    // red
-            else hue = 270 * (1 - (v - 20) / 60) // rainbow
+            const VEL_LOW = 20, VEL_HIGH = 90, BANDS = 15
+            let band: number
+            if (v <= VEL_LOW) band = 0
+            else if (v >= VEL_HIGH) band = BANDS - 1
+            else band = Math.min(BANDS - 1, Math.floor(((v - VEL_LOW) / (VEL_HIGH - VEL_LOW)) * BANDS))
+            const hue = 270 * (1 - band / (BANDS - 1))
             const alpha = 0.6 + (note.velocity / 127) * 0.4
             ctx.fillStyle = `hsla(${hue}, 85%, 55%, ${alpha})`
             ctx.beginPath()
