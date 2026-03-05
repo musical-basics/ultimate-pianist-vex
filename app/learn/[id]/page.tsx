@@ -58,7 +58,7 @@ export default function LearnPlayback() {
                 setTimeout(() => setMusicFont(savedFontRef.current), 1000)
             }
             // Hide overlay after 2s
-            setTimeout(() => setInitialLoading(false), 2000)
+            setTimeout(() => setInitialLoading(false), 1500)
         }
 
         // Fire on mount
