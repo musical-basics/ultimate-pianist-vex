@@ -7,7 +7,7 @@
 import * as React from 'react'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, Play, Pause, Square, SkipBack, Music2, Palette } from 'lucide-react'
+import { ArrowLeft, Play, Pause, Square, SkipBack, Music2, Palette, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
 import { SplitScreenLayout } from '@/components/layout/SplitScreenLayout'
@@ -48,6 +48,8 @@ export default function LearnPlayback() {
     const toggleRightHand = useAppStore((s) => s.toggleRightHand)
     const velocityKeyColor = useAppStore((s) => s.velocityKeyColor)
     const setVelocityKeyColor = useAppStore((s) => s.setVelocityKeyColor)
+    const noteGlow = useAppStore((s) => s.noteGlow)
+    const setNoteGlow = useAppStore((s) => s.setNoteGlow)
 
     // ─── 2s loading overlay: fires on mount AND every tab-switch-back ──
     useEffect(() => {
@@ -308,6 +310,15 @@ export default function LearnPlayback() {
                         className={`text-xs rounded-full px-3 h-7 ${velocityKeyColor ? 'bg-orange-600 border-orange-600 text-white' : 'border-zinc-700 text-zinc-400'}`}
                     >
                         <Palette className="w-3 h-3" />
+                    </Button>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setNoteGlow(!noteGlow)}
+                        title={noteGlow ? 'Note glow: On' : 'Note glow: Off'}
+                        className={`text-xs rounded-full px-3 h-7 ${noteGlow ? 'bg-orange-600 border-orange-600 text-white' : 'border-zinc-700 text-zinc-400'}`}
+                    >
+                        <Sparkles className="w-3 h-3" />
                     </Button>
                     <div className="flex items-center gap-1">
                         <span className="text-xs text-zinc-500">Tempo</span>

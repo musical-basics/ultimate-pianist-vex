@@ -281,8 +281,8 @@ export class WaterfallRenderer {
             // Clear and redraw this Graphics object
             g.clear()
 
-            // ── Active glow aura ──
-            if (active) {
+            // ── Active glow aura (toggleable) ──
+            if (active && useAppStore.getState().noteGlow) {
                 const glowPad = 4
                 g.roundRect(baseX - glowPad, noteTopY - glowPad, w + glowPad * 2, h + glowPad * 2, 6)
                 g.fill({ color: heatColor, alpha: 0.35 })
