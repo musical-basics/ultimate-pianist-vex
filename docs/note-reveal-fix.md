@@ -83,18 +83,41 @@ Call `bakeMidiOntoNotes()` directly inside `handleRenderComplete` (after noteMap
 
 **Key pattern:** When data is stored in a `useRef` (like `noteMap`), React effects won't detect when the ref's contents are replaced. Direct calls in the completion callback are needed.
 
-## Grace Note Fly-In Recurrence
+## Grace Note Fly-In (Multiple Root Causes)
 
 ### Bug
-Grace notes animated ("flew in") from the right side of the screen when revealed in NOTE mode.
+Grace notes animated ("flew in") from the right side of the screen when revealed in NOTE mode. Each fix reduced the distance but didn't eliminate it until the full chain of causes was understood.
 
-### Root Cause
-CSS `transition: 'transform 0.1s ease-out, filter 0.1s'` was applied to ALL note `<g>` elements (VexFlowRenderer.tsx line 664). Grace notes are positioned via SVG `transform` attribute (set by VexFlow's grace note rendering). When NOTE reveal mode changes their `opacity` from 0→1, the browser also animates any pending transform changes, causing the fly-in effect.
+### Root Cause Chain (3 cascading issues)
 
-This was a **recurrence** of a previously fixed bug. The original fix removed `opacity` from the transition list, which solved the problem at that time. But the `transform` transition remained and became the new culprit as the codebase evolved.
+#### 1. CSS `transform` transition on ALL elements
+**File:** `VexFlowRenderer.tsx` line 664
+**Symptom:** Grace notes animated smoothly from far right when revealed
+**Cause:** `transition: 'transform 0.1s ease-out, filter 0.1s'` applied to ALL note `<g>` elements indiscriminately.
 
-### Failed Fixes
-1. **Removing opacity transition** — fixed original occurrence, but `transform` transition caused the same visual bug to recur
+#### 2. VexFlow v5 doesn't create CSS classes for GraceNoteGroup
+**Symptom:** `.vf-gracenotegroup` class detection (both `.closest()` and `.querySelector()`) returned null for ALL notes — no `[GRACE DEBUG]` logs appeared
+**Cause:** VexFlow v5's `GraceNoteGroup` is a `Modifier` that draws grace notes via `graceNote.drawWithStyle()` directly. It never creates a wrapping `<g class="vf-gracenotegroup">` element in the SVG DOM.
+
+#### 3. `transformBox: fill-box` + `scale(1.4)` on wide bounding box
+**Symptom:** Grace notes still appeared to move even after removing CSS transition (just without animation)
+**Cause:** `transformBox: fill-box` creates a bounding box spanning BOTH the main note AND all attached grace notes. `scale(1.4)` from `transformOrigin: center center` of this wide box shifts grace notes visually because the scale origin is far from their individual centers.
+
+### Failed Fixes (tried in order)
+1. **Removing opacity from CSS transition** — reduced fly-in distance but `transform` transition still animated
+2. **`.closest('.vf-gracenotegroup')` (checking UP DOM tree)** — class doesn't exist; returned null
+3. **`.querySelector('.vf-gracenotegroup')` (checking DOWN DOM tree)** — class doesn't exist either
+4. **Removing only `transform` CSS transition for grace notes** — scale still caused instant position shift
 
 ### Solution
-Detect grace note elements via `element.closest('.vf-gracenotegroup')` and skip the `transform` CSS transition for those elements entirely. Regular notes still get the transition for smooth pop/jump/glow effects.
+Added `hasGrace` boolean flag to `NoteData` (set from `IntermediateNote.graceNotes` during rendering). For notes with `hasGrace=true`:
+- ❌ Skip `transformBox: fill-box` (prevents wide bounding box)
+- ❌ Skip `transformOrigin: center center`
+- ❌ Skip CSS `transition: transform`
+- ❌ Skip `scale()` pop effect in animation loop
+- ❌ Skip `translateY()` jump effect in animation loop
+- ✅ Still gets highlight color + glow effect (no spatial transforms)
+
+**Key learning:** VexFlow v5 modifiers (grace notes, articulations, etc.) don't create identifiable CSS classes in the SVG DOM. Use data-level flags from the IntermediateScore instead of DOM queries.
+
+**Future fix:** If VexFlow source is edited, the `GraceNoteGroup.draw()` method could render grace notes into their own nested `<g>` with a proper `transform` attribute isolated from the parent note. This would allow `transformBox: fill-box` on the main note without affecting grace note positioning, re-enabling pop/jump effects for those notes.

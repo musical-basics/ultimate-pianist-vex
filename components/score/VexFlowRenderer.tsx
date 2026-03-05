@@ -671,8 +671,6 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                     // CSS transform transition causes grace notes to 'fly in' when revealed.
                     if (!note.hasGrace) {
                         note.element.style.transition = 'transform 0.1s ease-out, filter 0.1s'
-                    } else {
-                        console.log(`[GRACE DEBUG] M${measureNum} id=${note.id} hasGrace=true — skipping transform transition`)
                     }
 
                     if (note.pathsAndRects) {

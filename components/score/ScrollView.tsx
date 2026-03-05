@@ -554,10 +554,6 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
                             if (!note.hasGrace) {
                                 tTransform = `scale(${popEffect ? 1.4 : 1}) translateY(${jumpEffect ? -10 : 0}px)`
                             }
-                            // DEBUG: Log velocity + color mapping
-                            if (Math.random() < 0.3) {
-                                console.log(`[HIGHLIGHT DEBUG] dynamicColor=${dynamicColor} useDynamic=${useDynamic} vel=${note.velocity} pitches=${JSON.stringify(note.pitches)} color=${dynColor} highlightNote=${highlightNote} tFill=${tFill}`)
-                            }
                         }
 
                         applyColor(note.element, tFill, note.pathsAndRects)
