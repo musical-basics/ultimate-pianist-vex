@@ -25,7 +25,7 @@ export default function LearnPlayback() {
     const [config, setConfig] = useState<SongConfig | null>(null)
     const [parsedMidi, setParsedMidi] = useState<ParsedMidi | null>(null)
     const [loading, setLoading] = useState(true)
-    const [fontReady, setFontReady] = useState(false)
+    const [initialLoading, setInitialLoading] = useState(true)
     const [musicFont, setMusicFont] = useState('')
     const [displayTime, setDisplayTime] = useState(0)
     const [volume, setVolumeLocal] = useState(100)
@@ -46,6 +46,12 @@ export default function LearnPlayback() {
     const toggleLeftHand = useAppStore((s) => s.toggleLeftHand)
     const toggleRightHand = useAppStore((s) => s.toggleRightHand)
 
+    // ─── Hardcoded 2s loading overlay (hides font swap from students) ──
+    useEffect(() => {
+        const timer = setTimeout(() => setInitialLoading(false), 2000)
+        return () => clearTimeout(timer)
+    }, [])
+
     // ─── Load config ──────────────────────────────────────────────
     useEffect(() => {
         const load = async () => {
@@ -59,8 +65,6 @@ export default function LearnPlayback() {
                     if (data.music_font) {
                         setTimeout(() => setMusicFont(data.music_font!), 1000)
                     }
-                    // Hold the loading screen for 1s so students don't see the font swap
-                    setTimeout(() => setFontReady(true), 1000)
                 }
             } catch (err) {
                 console.error('Failed to load config:', err)
@@ -173,7 +177,7 @@ export default function LearnPlayback() {
         return `${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`
     }
 
-    if (loading || !fontReady) {
+    if (loading) {
         return (
             <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
                 <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
@@ -182,7 +186,16 @@ export default function LearnPlayback() {
     }
 
     return (
-        <div className="h-screen flex flex-col overflow-hidden bg-zinc-950">
+        <div className="h-screen flex flex-col overflow-hidden bg-zinc-950 relative">
+            {/* Hardcoded 2s loading overlay — hides font swap from students */}
+            {initialLoading && (
+                <div className="absolute inset-0 z-[100] bg-zinc-950/80 backdrop-blur-md flex items-center justify-center">
+                    <div className="flex flex-col items-center gap-4">
+                        <div className="w-10 h-10 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+                        <span className="text-lg font-semibold text-white tracking-wide">LOADING</span>
+                    </div>
+                </div>
+            )}
             {/* Header */}
             <div className="flex items-center justify-between px-4 py-2 bg-zinc-900/80 backdrop-blur-lg border-b border-zinc-800 shrink-0 z-50">
                 <div className="flex items-center gap-3">
