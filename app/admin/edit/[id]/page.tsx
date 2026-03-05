@@ -34,7 +34,7 @@ export default function AdminEditor() {
     const [xmlEvents, setXmlEvents] = useState<XMLEvent[]>([])
     const xmlEventsRef = useRef<XMLEvent[]>([]) // Persists fermata data across OSMD re-renders
     const [v5State, setV5State] = useState<V5MapperState | null>(null)
-    const [musicFont, setMusicFont] = useState('Bravura')
+    const [musicFont, setMusicFont] = useState('')
 
     const anchors = useAppStore((s) => s.anchors)
     const beatAnchors = useAppStore((s) => s.beatAnchors)

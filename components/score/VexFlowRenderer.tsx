@@ -48,7 +48,7 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
     score,
     onRenderComplete,
     darkMode = false,
-    musicFont = 'Bravura',
+    musicFont = '',
 }) => {
     const containerRef = useRef<HTMLDivElement>(null)
     const rendererRef = useRef<Renderer | null>(null)
@@ -79,8 +79,8 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
     const renderScore = useCallback(() => {
         if (!score || !containerRef.current || score.measures.length === 0 || !fontsLoaded) return
         // Set the active font synchronously BEFORE creating any VexFlow objects
-        VexFlow.setFonts(musicFont)
-        const fontAvailable = document.fonts.check(`30px "${musicFont}"`)
+        if (musicFont) VexFlow.setFonts(musicFont)
+        const fontAvailable = musicFont ? document.fonts.check(`30px "${musicFont}"`) : true
         console.log('[FONT DEBUG] renderScore: musicFont =', JSON.stringify(musicFont), 'fontAvailable:', fontAvailable, 'getFonts():', VexFlow.getFonts())
 
         // Clear previous render
