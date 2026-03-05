@@ -3,7 +3,7 @@
 import * as React from 'react'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { Save, ArrowLeft, Music, FileMusic, FileAudio, SkipBack, Play, Pause, Square, FolderOpen } from 'lucide-react'
+import { Save, ArrowLeft, Music, FileMusic, FileAudio, SkipBack, Play, Pause, Square, FolderOpen, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
 import { SplitScreenLayout } from '@/components/layout/SplitScreenLayout'
@@ -584,11 +584,17 @@ export default function AdminEditor() {
                                 {formatTime(duration)}
                             </span>
 
-                            <Button variant="ghost" size="sm" onClick={() => handleSeek(Math.max(0, displayTime - 5))} className="text-zinc-400 h-8 px-1">
+                            <Button variant="ghost" size="sm" onClick={() => handleSeek(Math.max(0, displayTime - 5))} className="text-zinc-400 h-8 px-1" title="Skip back 5s">
                                 <SkipBack className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={() => handleSeek(Math.max(0, displayTime - 0.05))} className="text-zinc-400 h-8 px-1" title="Back 1 frame">
+                                <ChevronLeft className="w-3.5 h-3.5" />
                             </Button>
                             <Button size="sm" onClick={handlePlayPause} className="bg-purple-600 hover:bg-purple-700 text-white rounded-full w-8 h-8 p-0">
                                 {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 ml-0.5" />}
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={() => handleSeek(Math.min(duration, displayTime + 0.05))} className="text-zinc-400 h-8 px-1" title="Forward 1 frame">
+                                <ChevronRight className="w-3.5 h-3.5" />
                             </Button>
                             <Button variant="ghost" size="sm" onClick={handleStop} className="text-zinc-400 h-8 px-1">
                                 <Square className="w-3.5 h-3.5" />
