@@ -270,18 +270,20 @@ export class WaterfallRenderer {
             // Clear and redraw this Graphics object
             g.clear()
 
-            // Faint glass-like center tint so hollow notes don't vanish completely
+            // Base fill: white for white keys, black for black keys
+            const isBlack = isBlackKey(note.pitch)
+            const baseFill = isBlack ? 0x000000 : 0xFFFFFF
             g.roundRect(baseX, noteTopY, w, h, 4)
-            g.fill({ color: heatColor, alpha: active ? 0.15 : 0.05 })
+            g.fill({ color: baseFill, alpha: active ? 0.9 : 0.6 })
 
             if (note.velocity >= 120) {
-                // Max velocity: completely fill the note
+                // Max velocity: completely fill with color at 50% opacity (blends with base)
                 g.roundRect(baseX, noteTopY, w, h, 4)
-                g.fill({ color: heatColor, alpha: active ? 0.95 : 0.75 })
+                g.fill({ color: heatColor, alpha: active ? 0.5 : 0.4 })
             } else {
-                // Dynamic inner border: alignment 1 = stroke grows inward only
+                // Dynamic inner border at 50% opacity: blends with white/black base
                 g.roundRect(baseX, noteTopY, w, h, 4)
-                g.stroke({ color: heatColor, width: thickness, alignment: 1, alpha: active ? 0.95 : 0.75 })
+                g.stroke({ color: heatColor, width: thickness, alignment: 1, alpha: active ? 0.5 : 0.4 })
             }
         }
 
