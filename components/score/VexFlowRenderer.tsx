@@ -79,7 +79,7 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
     const renderScore = useCallback(() => {
         if (!score || !containerRef.current || score.measures.length === 0 || !fontsLoaded) return
         // Set the active font synchronously BEFORE creating any VexFlow objects
-        VexFlow.setFonts(musicFont, 'Academico')
+        VexFlow.setFonts(musicFont)
         const fontAvailable = document.fonts.check(`30px "${musicFont}"`)
         console.log('[FONT DEBUG] renderScore: musicFont =', JSON.stringify(musicFont), 'fontAvailable:', fontAvailable, 'getFonts():', VexFlow.getFonts())
 
