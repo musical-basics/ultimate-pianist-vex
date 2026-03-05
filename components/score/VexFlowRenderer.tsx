@@ -355,6 +355,7 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                                 stemElement: null,
                                 pathsAndRects,
                                 pitches: pitches && pitches.length > 0 ? pitches : undefined,
+                                hasGrace: !!(note.graceNotes && note.graceNotes.length > 0),
                             })
                         })
                     }
@@ -662,17 +663,13 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                     note.element.style.transformBox = 'fill-box'
                     note.element.style.transformOrigin = 'center center'
 
-                    // Grace notes use SVG transform for positioning — CSS transition would
-                    // cause them to 'fly in' when revealed. Skip transitions for:
-                    // 1. Elements INSIDE a grace note group (checking UP the tree)
-                    // 2. Elements that CONTAIN a grace note group (checking DOWN — main note with grace notes)
-                    const closestGrace = note.element.closest('.vf-gracenotegroup')
-                    const childGrace = note.element.querySelector('.vf-gracenotegroup')
-                    const isGraceRelated = closestGrace !== null || childGrace !== null
-                    if (!isGraceRelated) {
+                    // Grace notes: VexFlow v5 doesn't create CSS class wrappers for grace
+                    // note groups. Use data-level hasGrace flag instead of DOM queries.
+                    // CSS transform transition causes grace notes to 'fly in' when revealed.
+                    if (!note.hasGrace) {
                         note.element.style.transition = 'transform 0.1s ease-out, filter 0.1s'
                     } else {
-                        console.log(`[GRACE DEBUG] M${measureNum} id=${note.id} closestGrace=${!!closestGrace} childGrace=${!!childGrace} classes=${(note.element.className as unknown as { baseVal?: string })?.baseVal || note.element.className}`)
+                        console.log(`[GRACE DEBUG] M${measureNum} id=${note.id} hasGrace=true — skipping transform transition`)
                     }
 
                     if (note.pathsAndRects) {
@@ -683,11 +680,6 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
 
                     // Cache absoluteX for reveal mode calculations
                     note.absoluteX = note.element.getBoundingClientRect().left - cLeft
-
-                    // DEBUG: Log grace-related notes with their absoluteX
-                    if (isGraceRelated) {
-                        console.log(`[GRACE DEBUG] M${measureNum} id=${note.id} absoluteX=${note.absoluteX?.toFixed(0)} transition=${note.element.style.transition || 'NONE'}`)
-                    }
                 }
             })
             console.log(`[VFR DOM] Elements: populated=${populatedCount} missing=${missingCount}`)

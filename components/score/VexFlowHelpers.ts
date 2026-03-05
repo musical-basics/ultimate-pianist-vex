@@ -33,6 +33,7 @@ export type NoteData = {
     pitches?: number[]        // MIDI pitch numbers from VexFlow keys (e.g. [60, 64, 67])
     velocity?: number         // Matched MIDI velocity (0-127)
     midiDurationSec?: number  // Matched MIDI note duration in seconds
+    hasGrace?: boolean        // Whether this note has grace notes attached
 }
 
 export interface VexFlowRenderResult {
