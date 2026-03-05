@@ -18,18 +18,18 @@ import { useAppStore } from '../store'
 /**
  * Smooth velocity → rainbow color.
  *   ≤ 20  → purple (hue 270)
- *   ≥ 100 → red    (hue 0)
- *   20..100 → continuous rainbow from purple → blue → cyan → green → yellow → red
+ *   ≥ 110 → red    (hue 0)
+ *   20..110 → continuous rainbow from purple → blue → cyan → green → yellow → red
  */
 function velocityToColor(velocity: number): number {
     const v = Math.max(0, Math.min(127, velocity))
     let hue: number
     if (v <= 20) {
         hue = 270
-    } else if (v >= 100) {
+    } else if (v >= 110) {
         hue = 0
     } else {
-        const t = (v - 20) / (100 - 20) // 0..1
+        const t = (v - 20) / (110 - 20) // 0..1
         hue = 270 * (1 - t)
     }
     return hslToHex(hue, 85, 55)
@@ -271,7 +271,7 @@ export class WaterfallRenderer {
 
             // ── Width scaling by velocity (squared for dramatic contrast) ──
             const velClamped = Math.max(0, Math.min(127, note.velocity))
-            const velT = velClamped <= 20 ? 0 : velClamped >= 100 ? 1 : (velClamped - 20) / 80
+            const velT = velClamped <= 20 ? 0 : velClamped >= 110 ? 1 : (velClamped - 20) / 90
             const velTSq = velT * velT
             const minScale = isBlackKey(note.pitch) ? 0.5 : 0.3
             const widthScale = minScale + (1 - minScale) * velTSq
