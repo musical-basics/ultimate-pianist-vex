@@ -25,6 +25,7 @@ export default function LearnPlayback() {
     const [config, setConfig] = useState<SongConfig | null>(null)
     const [parsedMidi, setParsedMidi] = useState<ParsedMidi | null>(null)
     const [loading, setLoading] = useState(true)
+    const [fontReady, setFontReady] = useState(false)
     const [musicFont, setMusicFont] = useState('')
     const [displayTime, setDisplayTime] = useState(0)
     const [volume, setVolumeLocal] = useState(100)
@@ -56,8 +57,10 @@ export default function LearnPlayback() {
                     if (data.anchors) setAnchors(data.anchors)
                     if (data.beat_anchors) setBeatAnchors(data.beat_anchors)
                     if (data.music_font) {
-                        setTimeout(() => setMusicFont(data.music_font!), 2000)
+                        setTimeout(() => setMusicFont(data.music_font!), 1000)
                     }
+                    // Hold the loading screen for 1s so students don't see the font swap
+                    setTimeout(() => setFontReady(true), 1000)
                 }
             } catch (err) {
                 console.error('Failed to load config:', err)
@@ -170,7 +173,7 @@ export default function LearnPlayback() {
         return `${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`
     }
 
-    if (loading) {
+    if (loading || !fontReady) {
         return (
             <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
                 <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
