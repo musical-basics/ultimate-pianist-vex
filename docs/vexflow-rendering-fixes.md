@@ -143,11 +143,11 @@ formatter.format(vfVoices, Math.max(availableWidth, 100))
 
 ---
 
-## 7. Font Persistence — Race Condition on Page Refresh
+## 7. Font Persistence — Race Condition on Page Refresh & Tab Switch
 
-**Problem**: Saving a non-default font (e.g., Gonville) and refreshing the page would render the score in the *wrong* font. There was a consistent off-by-one shift — saving Gonville (#2) yielded Petaluma (#3), saving Petaluma (#3) yielded Academico (#4).
+**Problem**: Saving a non-default font (e.g., Gonville) and refreshing the page would render the score in the *wrong* font. There was a consistent off-by-one shift — saving Gonville (#2) yielded Petaluma (#3), saving Petaluma (#3) yielded Academico (#4). Additionally, switching browser tabs and returning would lose the font entirely.
 
-**Root Cause (Two-Part)**:
+**Root Cause (Three-Part)**:
 
 ### Part A: `document.fonts.ready` lies
 
@@ -166,17 +166,45 @@ Promise.all([
 
 ### Part B: VexFlow ignores your "default" — it loads whatever it has
 
-The initial state was `useState('Bravura')`, which called `VexFlow.setFonts('Bravura')` on the very first render. But **VexFlow does not care what you tell it to load initially** — it loads whatever font it has available internally, which is NOT Bravura. So the first render used VexFlow's actual internal default (not Bravura), but React's state already said `musicFont = 'Bravura'`. When the 5-second delayed `setMusicFont(data.music_font)` fired with `'Bravura'`, React saw "state is already `'Bravura'`" and **did not re-render**. The saved font never got applied.
+The initial state was `useState('Bravura')`, which called `VexFlow.setFonts('Bravura')` on the very first render. But **VexFlow does not care what you tell it to load initially** — it loads whatever font it has available internally, which is NOT Bravura. So the first render used VexFlow's actual internal default (not Bravura), but React's state already said `musicFont = 'Bravura'`. When the delayed `setMusicFont(data.music_font)` fired with `'Bravura'`, React saw "state is already `'Bravura'`" and **did not re-render**. The saved font never got applied.
 
 **Fix**: Initialize `musicFont` as an empty string (`useState('')`) and only call `VexFlow.setFonts()` when the font is explicitly set. This way:
 1. First render uses VexFlow's true internal default (no override)
-2. After 5 seconds, `setMusicFont('Bravura')` fires → state changes from `''` to `'Bravura'` → triggers re-render → font loads correctly
+2. After 1 second, `setMusicFont('Bravura')` fires → state changes from `''` to `'Bravura'` → triggers re-render → font loads correctly
+
+### Part C: Tab switching kills fonts
+
+Even after fixing A and B, switching to another browser tab and returning would lose the fonts. The browser unloads/garbage-collects web fonts when a tab is backgrounded. On return, VexFlow's SVG still references the font by name, but the browser no longer has the font data — so it silently falls back to whatever is available.
+
+**Fix**: Listen for `visibilitychange` events. When the user returns to the tab, re-trigger the entire font loading sequence: reset `musicFont` to `''`, re-apply the saved font after 1 second. On the student-facing learn page, a 2-second blur overlay hides this process.
 
 ### Final Working Solution
+
+**Strategy**: Never trust the initial font state. Always delay applying the saved font by 1 second to give fonts time to download. On the student page, show an opaque blur overlay for 2 seconds to hide the font swap entirely.
 
 | File | Change |
 |------|--------|
 | [VexFlowRenderer.tsx](file:///Users/lionelyu/Documents/New%20Version/ultimate-pianist-vex/components/score/VexFlowRenderer.tsx) | `document.fonts.ready` → explicit `document.fonts.load()` per font; default prop `''` instead of `'Bravura'`; guard `setFonts()` behind `if (musicFont)` |
-| [page.tsx](file:///Users/lionelyu/Documents/New%20Version/ultimate-pianist-vex/app/admin/edit/%5Bid%5D/page.tsx) | `useState('')` instead of `useState('Bravura')`; delay `setMusicFont(data.music_font)` by 5 seconds via `setTimeout` |
+| [Admin page.tsx](file:///Users/lionelyu/Documents/New%20Version/ultimate-pianist-vex/app/admin/edit/%5Bid%5D/page.tsx) | `useState('')` instead of `useState('Bravura')`; delay `setMusicFont(data.music_font)` by 1s via `setTimeout` — admin sees the font swap, which is acceptable |
+| [Learn page.tsx](file:///Users/lionelyu/Documents/New%20Version/ultimate-pianist-vex/app/learn/%5Bid%5D/page.tsx) | Same 1s font delay; hardcoded 2s blur overlay (`initialLoading` state) on mount AND on every `visibilitychange` (tab-switch-back); saved font stored in `savedFontRef` so the visibility handler can re-apply it |
 
-**Key Lesson**: VexFlow's font system has two layers — VexFlow's internal font registry (populated by `loadFonts`) and the browser's font cache (populated by actual HTTP downloads). Both must be ready before rendering. Never assume a font is "available" just because you told VexFlow to load it. And never hardcode a default that masks a state change — if React thinks the state hasn't changed, it won't re-render.
+**The learn page font reload sequence**:
+```
+Mount / Tab Return
+  │
+  ├─ t=0s:  setMusicFont('') → VexFlow renders with internal default
+  │         setInitialLoading(true) → blur overlay visible
+  │
+  ├─ t=1s:  setMusicFont(savedFont) → re-render with correct font
+  │
+  └─ t=2s:  setInitialLoading(false) → blur overlay gone
+            Student sees the score with the correct font, no swap visible
+```
+
+**Key Lessons**:
+1. VexFlow's font system has two layers — VexFlow's internal font registry (`loadFonts`) and the browser's font cache (actual HTTP downloads). Both must be ready before rendering.
+2. Never hardcode a default that masks a state change — if React thinks the state hasn't changed, it won't re-render.
+3. Browser tabs are hostile to web fonts. Always re-initialize fonts on `visibilitychange` for any app that uses custom web fonts.
+4. For student-facing UX, hide all font loading behind a timed overlay rather than relying on "ready" promises — those promises are unreliable.
+
+
