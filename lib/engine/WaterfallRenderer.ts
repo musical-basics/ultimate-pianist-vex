@@ -76,6 +76,7 @@ export class WaterfallRenderer {
 
     private activeThisFrame: Uint8Array = new Uint8Array(128)
     private activeLastFrame: Uint8Array = new Uint8Array(128)
+    private activeColorThisFrame: (string | null)[] = new Array(128).fill(null)
 
     private notes: NoteEvent[] = []
     private leftHandActive = true
@@ -212,6 +213,7 @@ export class WaterfallRenderer {
         this.activeLastFrame = this.activeThisFrame
         this.activeThisFrame = temp
         this.activeThisFrame.fill(0)
+        this.activeColorThisFrame.fill(null)
 
         const windowStart = time - 0.5
         const windowEnd = time + lookaheadSec
@@ -251,7 +253,14 @@ export class WaterfallRenderer {
             const heatColor = velocityToColor(note.velocity)
             const active = time >= note.startTimeSec && time <= note.endTimeSec
 
-            if (active) this.activeThisFrame[note.pitch] = 1
+            if (active) {
+                this.activeThisFrame[note.pitch] = 1
+                // Store CSS color for piano key highlighting
+                const r = (heatColor >> 16) & 0xFF
+                const gn = (heatColor >> 8) & 0xFF
+                const b = heatColor & 0xFF
+                this.activeColorThisFrame[note.pitch] = `rgb(${r},${gn},${b})`
+            }
 
             // ── Width scaling by velocity (squared for dramatic contrast) ──
             // White keys: 30%→100%, Black keys: 50%→100%
@@ -305,10 +314,20 @@ export class WaterfallRenderer {
 
             if (wasActive && !isActive) {
                 const el = this.keyElements[pitch]
-                if (el) el.dataset.active = 'false'
+                if (el) {
+                    el.dataset.active = 'false'
+                    el.style.backgroundColor = ''
+                }
             } else if (!wasActive && isActive) {
                 const el = this.keyElements[pitch]
-                if (el) el.dataset.active = 'true'
+                if (el) {
+                    el.dataset.active = 'true'
+                    el.style.backgroundColor = this.activeColorThisFrame[pitch] || ''
+                }
+            } else if (isActive && this.activeColorThisFrame[pitch]) {
+                // Update color if velocity changes while held
+                const el = this.keyElements[pitch]
+                if (el) el.style.backgroundColor = this.activeColorThisFrame[pitch] || ''
             }
         }
 
@@ -332,7 +351,10 @@ export class WaterfallRenderer {
 
         for (let pitch = MIDI_MIN; pitch <= MIDI_MAX; pitch++) {
             const el = this.keyElements[pitch]
-            if (el) el.dataset.active = 'false'
+            if (el) {
+                el.dataset.active = 'false'
+                el.style.backgroundColor = ''
+            }
         }
 
         if (this.notePool) {

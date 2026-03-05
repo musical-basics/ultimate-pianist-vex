@@ -69,10 +69,10 @@ const PianoKeyboardBase = React.forwardRef<HTMLDivElement>((_, ref) => {
                             'border-r border-zinc-300 last:border-r-0',
                             'rounded-b-md',
                             'shadow-sm',
-                            'data-[active=true]:bg-purple-500',
                             'hover:bg-zinc-100',
-                            'active:bg-purple-400',
-                            'cursor-pointer'
+                            'active:bg-zinc-200',
+                            'cursor-pointer',
+                            'transition-colors duration-75'
                         )}
                         role="button"
                         aria-label={`Piano key ${key.noteName}`}
@@ -96,10 +96,10 @@ const PianoKeyboardBase = React.forwardRef<HTMLDivElement>((_, ref) => {
                             'rounded-b-md',
                             'shadow-md',
                             'z-10',
-                            'data-[active=true]:bg-purple-600',
                             'hover:bg-zinc-800',
-                            'active:bg-purple-500',
-                            'cursor-pointer'
+                            'active:bg-zinc-700',
+                            'cursor-pointer',
+                            'transition-colors duration-75'
                         )}
                         style={{
                             left: `${leftPercent}%`,
