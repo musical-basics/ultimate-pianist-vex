@@ -53,3 +53,16 @@ Ties and slurs span from a past note to a future note. Using their LEFT bounding
 Switching tabs or reveal modes could cause VexFlow fonts to not render correctly.
 
 **Fix:** Added `visibilitychange` listener on both admin and learn pages to reset and re-apply `musicFont` after a 1-second delay when the user switches back to the tab. Uses `savedFontRef` to track the current font across tab switches.
+
+### Preview / RevealMode / DarkMode Toggle Font Revert
+Toggling any of these settings triggers React re-renders that cause VexFlow to briefly display the default font instead of the selected one.
+
+**Fix:** Added a `useEffect` on the admin page that watches `previewEffects`, `revealMode`, and `darkMode`. When any changes, it resets `musicFont` to blank and re-applies after 1s delay.
+
+## State Persistence
+Settings were lost on page refresh — `previewEffects`, `revealMode`, `darkMode`, etc. reset to defaults.
+
+**Fix:** Added Zustand `persist` middleware to `lib/store.ts`. UI preferences (14 settings) are saved to localStorage under `ultimate-pianist-settings`. Transient state (playback, MIDI data, anchors) is excluded via `partialize`.
+
+### Persisted Settings
+`revealMode`, `darkMode`, `highlightNote`, `glowEffect`, `popEffect`, `jumpEffect`, `previewEffects`, `showCursor`, `showScore`, `showWaterfall`, `velocityKeyColor`, `noteGlow`, `cursorPosition`, `curtainLookahead`

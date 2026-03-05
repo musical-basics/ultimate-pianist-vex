@@ -47,6 +47,7 @@ export default function AdminEditor() {
     const setDarkMode = useAppStore((s) => s.setDarkMode)
     const revealMode = useAppStore((s) => s.revealMode)
     const setRevealMode = useAppStore((s) => s.setRevealMode)
+    const previewEffects = useAppStore((s) => s.previewEffects)
     const highlightNote = useAppStore((s) => s.highlightNote)
     const setHighlightNote = useAppStore((s) => s.setHighlightNote)
     const glowEffect = useAppStore((s) => s.glowEffect)
@@ -82,6 +83,23 @@ export default function AdminEditor() {
         document.addEventListener('visibilitychange', onVisibilityChange)
         return () => document.removeEventListener('visibilitychange', onVisibilityChange)
     }, [])
+
+    // ─── Font re-apply when toggles cause VexFlow re-render ──
+    const prevPreviewRef = useRef(previewEffects)
+    const prevRevealRef = useRef(revealMode)
+    const prevDarkRef = useRef(darkMode)
+    useEffect(() => {
+        const changed = prevPreviewRef.current !== previewEffects
+            || prevRevealRef.current !== revealMode
+            || prevDarkRef.current !== darkMode
+        prevPreviewRef.current = previewEffects
+        prevRevealRef.current = revealMode
+        prevDarkRef.current = darkMode
+        if (changed && savedFontRef.current) {
+            setMusicFont('')
+            setTimeout(() => setMusicFont(savedFontRef.current), 1000)
+        }
+    }, [previewEffects, revealMode, darkMode])
 
     useEffect(() => {
         const load = async () => {
