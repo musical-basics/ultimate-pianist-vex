@@ -271,6 +271,17 @@ export class WaterfallRenderer {
             // Clear and redraw this Graphics object
             g.clear()
 
+            // ── Active glow aura ──
+            if (active) {
+                const glowPad = 4
+                g.roundRect(baseX - glowPad, noteTopY - glowPad, w + glowPad * 2, h + glowPad * 2, 6)
+                g.fill({ color: heatColor, alpha: 0.35 })
+                // Second softer outer glow
+                const outerPad = 8
+                g.roundRect(baseX - outerPad, noteTopY - outerPad, w + outerPad * 2, h + outerPad * 2, 8)
+                g.fill({ color: heatColor, alpha: 0.15 })
+            }
+
             // Base fill: white for white keys, black for black keys
             const isBlack = isBlackKey(note.pitch)
             const baseFill = isBlack ? 0x000000 : 0xFFFFFF
