@@ -274,7 +274,7 @@ export class WaterfallRenderer {
             const isBlack = isBlackKey(note.pitch)
             const baseFill = isBlack ? 0x000000 : 0xFFFFFF
             g.roundRect(baseX, noteTopY, w, h, 4)
-            g.fill({ color: baseFill, alpha: active ? 0.9 : 0.6 })
+            g.fill({ color: baseFill, alpha: 1.0 })
 
             if (note.velocity >= 120) {
                 // Max velocity: completely fill with color at 50% opacity (blends with base)
