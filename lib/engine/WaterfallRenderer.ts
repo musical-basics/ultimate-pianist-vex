@@ -8,6 +8,7 @@ import { NotePool } from './NotePool'
 import {
     calculatePianoMetricsFromDOM,
     calculatePianoMetrics,
+    isBlackKey,
     MIDI_MIN,
     MIDI_MAX,
 } from './pianoMetrics'
@@ -245,13 +246,21 @@ export class WaterfallRenderer {
             const g = this.notePool.acquire()
             if (!g) break
 
-            const baseX = Math.round(this.keyX[note.pitch])
-            const w = Math.round(this.keyW[note.pitch])
+            const fullW = Math.round(this.keyW[note.pitch])
             const h = Math.max(Math.round(noteHeight), 12)
             const heatColor = velocityToColor(note.velocity)
             const active = time >= note.startTimeSec && time <= note.endTimeSec
 
             if (active) this.activeThisFrame[note.pitch] = 1
+
+            // ── Width scaling by velocity ──
+            // White keys: 50%→100%, Black keys: 70%→100%
+            const velClamped = Math.max(0, Math.min(127, note.velocity))
+            const velT = velClamped <= 20 ? 0 : velClamped >= 100 ? 1 : (velClamped - 20) / 80
+            const minScale = isBlackKey(note.pitch) ? 0.7 : 0.5
+            const widthScale = minScale + (1 - minScale) * velT
+            const w = Math.max(4, Math.round(fullW * widthScale))
+            const baseX = Math.round(this.keyX[note.pitch]) + Math.round((fullW - w) / 2) // center on key
 
             // Calculate inner border thickness based on velocity
             const maxThickness = Math.min(w, h) / 2
