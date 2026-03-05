@@ -126,12 +126,17 @@ export default function LearnPlayback() {
         loadMidiFile()
     }, [config?.midi_url, loadMidi])
 
-    // ─── Display time loop ────────────────────────────────────────
+    // ─── Display time loop (throttled to ~15fps to avoid React re-render storms) ──
     useEffect(() => {
+        let lastUpdate = 0
         const tick = (ts: number) => {
             const pm = getPlaybackManager()
-            setDisplayTime(pm.getTime())
             if (!pm.isPlaying && isPlaying) setPlaying(false)
+            // Only update React state at ~15fps — the slider doesn't need 60fps
+            if (ts - lastUpdate > 66) {
+                setDisplayTime(pm.getTime())
+                lastUpdate = ts
+            }
             displayRafRef.current = requestAnimationFrame(tick)
         }
         if (isPlaying) displayRafRef.current = requestAnimationFrame(tick)
