@@ -267,15 +267,18 @@ export class WaterfallRenderer {
             item.fill.tint = color
             item.border.tint = color
 
-            // Density: fill alpha varies by velocity (soft=hollow, loud=solid)
+            // Density: fill alpha varies by velocity² (soft=hollow, loud=solid)
+            // Squared curve makes the difference much more dramatic
             // Border stays visible so note outlines are always clear
+            const vNorm = note.velocity / 127 // 0..1
+            const density = vNorm * vNorm     // squared: soft→very transparent, loud→solid
             if (active) {
                 this.activeThisFrame[note.pitch] = 1
-                item.fill.alpha = Math.max(0.05, note.velocity / 127)
+                item.fill.alpha = Math.max(0.03, density)
                 item.border.alpha = 1.0
             } else {
-                item.fill.alpha = Math.max(0.05, (note.velocity / 127) * 0.8)
-                item.border.alpha = 0.4
+                item.fill.alpha = Math.max(0.03, density * 0.7)
+                item.border.alpha = 0.5
             }
         }
 
