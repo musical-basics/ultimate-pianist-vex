@@ -630,7 +630,21 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
 
             const cLeft = containerRef.current.getBoundingClientRect().left
 
+            // DEBUG: Check what IDs exist in the SVG
+            const svgEl = containerRef.current.querySelector('svg')
+            if (svgEl) {
+                const allIds = Array.from(svgEl.querySelectorAll('[id]')).map(e => e.id)
+                const vfIds = allIds.filter(id => id.startsWith('vf-'))
+                console.log(`[VFR DOM] SVG has ${allIds.length} elements with id, ${vfIds.length} with vf- prefix`)
+                if (vfIds.length > 0) console.log('[VFR DOM] Sample vf-IDs:', vfIds.slice(0, 5))
+                if (vfIds.length === 0 && allIds.length > 0) console.log('[VFR DOM] Non-vf IDs sample:', allIds.slice(0, 5))
+            } else {
+                console.warn('[VFR DOM] No SVG element found!')
+            }
+
             // Populate noteMap element references
+            let foundCount = 0, missCount = 0
+            const sampleMissIds: string[] = []
             allNoteData.forEach((notes) => {
                 for (const note of notes) {
                     const el = containerRef.current?.querySelector(`[id="${note.id}"]`) as HTMLElement
@@ -651,10 +665,15 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                         note.element = group
                         note.pathsAndRects = pathsAndRects
                         note.absoluteX = group.getBoundingClientRect().left - cLeft
+                        foundCount++
+                    } else {
+                        missCount++
+                        if (sampleMissIds.length < 5) sampleMissIds.push(note.id)
                     }
                 }
             })
-
+            console.log(`[VFR DOM] Element lookup: found=${foundCount} missed=${missCount}`)
+            if (sampleMissIds.length > 0) console.log('[VFR DOM] Missed IDs sample:', sampleMissIds)
             setIsRendered(true)
 
             // Fire callback with all rendering data
