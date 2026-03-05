@@ -3,7 +3,7 @@
 import * as React from 'react'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { Save, ArrowLeft, Music, FileMusic, FileAudio, SkipBack, Play, Pause, Square } from 'lucide-react'
+import { Save, ArrowLeft, Music, FileMusic, FileAudio, SkipBack, Play, Pause, Square, FolderOpen } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
 import { SplitScreenLayout } from '@/components/layout/SplitScreenLayout'
@@ -542,6 +542,15 @@ export default function AdminEditor() {
                                 placeholder="Song title..."
                                 className="bg-transparent border-none text-white text-lg font-medium focus:outline-none placeholder:text-zinc-600 w-64"
                             />
+                            <Button size="sm" onClick={handleSave} disabled={saving} className="bg-green-600 hover:bg-green-700 text-white">
+                                <Save className="w-3.5 h-3.5 mr-1" /> {saving ? 'Saving...' : 'Save'}
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={handleSaveAs} disabled={saving} className="border-zinc-600 text-zinc-300 hover:text-white">
+                                Save As
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={() => router.push('/admin')} className="text-zinc-400 hover:text-white">
+                                <FolderOpen className="w-3.5 h-3.5 mr-1" /> Open
+                            </Button>
                         </div>
 
                         <div className="flex items-center gap-2">
@@ -616,15 +625,6 @@ export default function AdminEditor() {
                                 onPopToggle={() => setPopEffect(!popEffect)} onJumpToggle={() => setJumpEffect(!jumpEffect)}
                                 onLockToggle={() => setIsLocked(!isLocked)} onCursorToggle={() => setShowCursor(!showCursor)}
                             />
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                            <Button size="sm" onClick={handleSave} disabled={saving} className="bg-green-600 hover:bg-green-700 text-white">
-                                <Save className="w-3.5 h-3.5 mr-1" /> {saving ? 'Saving...' : 'Save'}
-                            </Button>
-                            <Button size="sm" variant="outline" onClick={handleSaveAs} disabled={saving} className="border-zinc-600 text-zinc-300 hover:text-white">
-                                Save As
-                            </Button>
                         </div>
                     </div>
                 </div>
