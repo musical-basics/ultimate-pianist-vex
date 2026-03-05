@@ -201,6 +201,16 @@ export class WaterfallRenderer {
     private renderFrame(): void {
         if (!this.notePool || this.notes.length === 0) return
 
+        // Read live container dimensions every frame to avoid stale values
+        // after layout changes (e.g., toggling sheet music off)
+        const rect = this.canvasContainer.getBoundingClientRect()
+        if (rect.width !== this.canvasWidth || rect.height !== this.canvasHeight) {
+            this.canvasWidth = rect.width
+            this.canvasHeight = rect.height
+            this.strikeLineY = this.canvasHeight - 4
+            this.drawStrikeLine()
+        }
+
         const time = this.playbackManager.getVisualTime()
         const pps = this.pixelsPerSecond
         const strikeY = this.strikeLineY
