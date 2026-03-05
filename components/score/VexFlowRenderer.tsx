@@ -331,7 +331,23 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                             try {
                                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                                 const sn = staveNote as any
-                                const el = sn.el || sn.attrs?.el
+
+                                // DEBUG: Dump StaveNote properties once to find SVG element ref
+                                if (!coordinateExtractors._dumped) {
+                                    coordinateExtractors._dumped = true
+                                    const ownKeys = Object.keys(sn).filter(k => typeof sn[k] !== 'function')
+                                    console.log('[VFR DEBUG] StaveNote own keys:', ownKeys)
+                                    console.log('[VFR DEBUG] StaveNote attrs:', sn.attrs)
+                                    // Check prototype for getters
+                                    const protoNames = Object.getOwnPropertyNames(Object.getPrototypeOf(sn))
+                                        .filter(k => k !== 'constructor' && typeof sn[k] !== 'function')
+                                    console.log('[VFR DEBUG] StaveNote proto non-fn:', protoNames)
+                                    // Check common SVG element property names
+                                    console.log('[VFR DEBUG] .el=', sn.el, '.svg=', sn.svg, '.element=', sn.element,
+                                        '.getSVGElement=', typeof sn.getSVGElement, '.getElement=', typeof sn.getElement)
+                                }
+
+                                const el = sn.el || sn.attrs?.el || sn.svg || sn.element
                                 if (el) {
                                     const group = (el.closest?.('.vf-stavenote') as HTMLElement) || (el as HTMLElement)
                                     element = group
