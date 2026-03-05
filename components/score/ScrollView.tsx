@@ -159,6 +159,26 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
         allSymbolsRef.current = newAllSymbols
         lastMeasureIndexRef.current = -1
 
+        // Pre-cache note child elements and absolute X positions
+        if (containerRef.current) {
+            const cLeft = containerRef.current.getBoundingClientRect().left
+            result.noteMap.forEach((notes) => {
+                for (const note of notes) {
+                    if (note.element) {
+                        const group = note.element
+                        const pathsAndRects = Array.from(group.querySelectorAll('path, rect')) as HTMLElement[]
+                        pathsAndRects.forEach(p => {
+                            p.style.transformBox = 'fill-box'
+                            p.style.transformOrigin = 'center'
+                            p.style.transition = 'transform 0.1s ease-out, fill 0.1s, stroke 0.1s'
+                        })
+                        note.pathsAndRects = pathsAndRects
+                        note.absoluteX = group.getBoundingClientRect().left - cLeft
+                    }
+                }
+            })
+        }
+
         setIsLoaded(true)
 
         // Fire onScoreLoaded with the preserved xmlEvents
@@ -219,11 +239,18 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
         }
     }, [anchors, beatAnchors])
 
-    // ─── Color Application (unchanged) ─────────────────────────────
-    const applyColor = (element: HTMLElement, color: string) => {
+    // ─── Color Application (uses cached elements when available) ───
+    const applyColor = (element: HTMLElement, color: string, cachedPaths?: HTMLElement[]) => {
         if (!element) return
-        Array.from(element.getElementsByTagName('path')).forEach(p => { p.style.fill = color; p.style.stroke = color; p.setAttribute('fill', color); p.setAttribute('stroke', color) })
-        Array.from(element.getElementsByTagName('rect')).forEach(r => { r.style.fill = color; r.style.stroke = color; r.setAttribute('fill', color); r.setAttribute('stroke', color) })
+        if (cachedPaths) {
+            cachedPaths.forEach(p => {
+                p.style.fill = color; p.style.stroke = color
+                p.setAttribute('fill', color); p.setAttribute('stroke', color)
+            })
+        } else {
+            Array.from(element.getElementsByTagName('path')).forEach(p => { p.style.fill = color; p.style.stroke = color; p.setAttribute('fill', color); p.setAttribute('stroke', color) })
+            Array.from(element.getElementsByTagName('rect')).forEach(r => { r.style.fill = color; r.style.stroke = color; r.setAttribute('fill', color); r.setAttribute('stroke', color) })
+        }
         element.style.fill = color; element.style.stroke = color
     }
 
@@ -267,6 +294,8 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
         staffLinesRef.current.forEach(el => applyColor(el, baseColor))
         if (scrollContainerRef.current) scrollContainerRef.current.style.backgroundColor = bgColor
         if (curtainRef.current) curtainRef.current.style.backgroundColor = bgColor
+        // Invalidate isActive state so notes re-render in new theme
+        noteMap.current.forEach(notes => notes.forEach(n => { n.isActive = undefined }))
     }, [darkMode, isLoaded])
 
     // ─── Cursor Positioning (rewritten for VexFlow maps) ───────────
@@ -340,31 +369,50 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
                     const totalWidth = lastMeasureX + 300
                     curtainRef.current.style.left = `${curtainStart}px`
                     curtainRef.current.style.width = `${Math.max(0, totalWidth - curtainStart + 800)}px`
-                    curtainRef.current.style.height = `${Math.max(containerRef.current?.scrollHeight || 0, containerRef.current?.clientHeight || 0)}px`
+                    // Height handled by CSS top:0/bottom:0 — no scrollHeight read needed
                     curtainRef.current.style.backgroundColor = darkMode ? '#18181b' : '#ffffff'
                 } else {
                     curtainRef.current.style.display = 'none'
                 }
             }
 
-            // ─── NOTE reveal: individual note opacity ────────────────
+            // ─── NOTE reveal: individual note opacity (no getBoundingClientRect) ─
             if (revealMode === 'NOTE') {
+                const scrollLeft = scrollContainerRef.current?.scrollLeft || 0
                 noteMap.current.forEach((notes) => {
                     for (const n of notes) {
-                        if (!n.element) continue
-                        try {
-                            const noteX = n.element.getBoundingClientRect().left -
-                                (containerRef.current?.getBoundingClientRect().left || 0) +
-                                (scrollContainerRef.current?.scrollLeft || 0)
-                            n.element.style.opacity = noteX <= cursorX + 5 ? '1' : '0'
+                        if (!n.element || n.absoluteX === undefined) continue
+                        const noteX = n.absoluteX + scrollLeft
+                        const isRevealed = noteX <= cursorX + 5
+                        if (n.isRevealed !== isRevealed) {
+                            n.isRevealed = isRevealed
+                            n.element.style.opacity = isRevealed ? '1' : '0'
                             n.element.style.transition = 'opacity 0.15s ease-out'
-                        } catch { /* ignore */ }
+                        }
                     }
                 })
             }
 
-            if (currentMeasureIndex !== lastMeasureIndexRef.current && onMeasureChange) {
-                onMeasureChange(measure)
+            if (currentMeasureIndex !== lastMeasureIndexRef.current) {
+                // Deactivate previous measure's notes
+                if (lastMeasureIndexRef.current !== -1) {
+                    const prevNotes = noteMap.current.get(lastMeasureIndexRef.current + 1)
+                    if (prevNotes) {
+                        const defaultColor = darkMode ? '#e0e0e0' : '#000000'
+                        prevNotes.forEach(n => {
+                            if (n.isActive) {
+                                n.isActive = false
+                                if (n.element) {
+                                    applyColor(n.element, defaultColor, n.pathsAndRects)
+                                    if (n.stemElement) applyColor(n.stemElement, defaultColor)
+                                    n.element.style.filter = 'none'
+                                    if (n.pathsAndRects) n.pathsAndRects.forEach(p => p.style.transform = 'scale(1) translateY(0)')
+                                }
+                            }
+                        })
+                    }
+                }
+                if (onMeasureChange) onMeasureChange(measure)
             }
             lastMeasureIndexRef.current = currentMeasureIndex
 
@@ -384,17 +432,26 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
                     const lookahead = 0.04
                     const noteEndThreshold = note.timestamp + 0.01
                     const isActive = (globalProgress <= noteEndThreshold && globalProgress >= note.timestamp - lookahead)
-                    let tFill = defaultColor, tFilter = 'none', tTransform = 'scale(1) translateY(0)'
 
-                    if (isActive) {
-                        if (highlightNote) tFill = highlightColor
-                        if (glowEffect) tFilter = `drop-shadow(0 0 6px ${shadowColor})`
-                        tTransform = `scale(${popEffect ? 1.4 : 1}) translateY(${jumpEffect ? -10 : 0}px)`
+                    // State diffing: only touch DOM when state actually changes
+                    if (note.isActive !== isActive) {
+                        note.isActive = isActive
+                        let tFill = defaultColor, tFilter = 'none', tTransform = 'scale(1) translateY(0)'
+
+                        if (isActive) {
+                            if (highlightNote) tFill = highlightColor
+                            if (glowEffect) tFilter = `drop-shadow(0 0 6px ${shadowColor})`
+                            tTransform = `scale(${popEffect ? 1.4 : 1}) translateY(${jumpEffect ? -10 : 0}px)`
+                        }
+                        applyColor(note.element, tFill, note.pathsAndRects)
+                        if (note.stemElement) applyColor(note.stemElement, tFill)
+                        note.element.style.filter = tFilter
+                        if (note.pathsAndRects) {
+                            note.pathsAndRects.forEach(p => p.style.transform = tTransform)
+                        } else {
+                            note.element.querySelectorAll('path, rect').forEach(p => (p as HTMLElement).style.transform = tTransform)
+                        }
                     }
-                    applyColor(note.element, tFill)
-                    if (note.stemElement) applyColor(note.stemElement, tFill)
-                    note.element.style.filter = tFilter
-                    note.element.querySelectorAll('path, rect').forEach(p => (p as HTMLElement).style.transform = tTransform)
                 })
             }
 

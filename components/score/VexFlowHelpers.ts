@@ -22,6 +22,11 @@ export type NoteData = {
     timestamp: number
     element: HTMLElement | null
     stemElement: HTMLElement | null
+    // Pre-cached for animation loop (avoid per-frame DOM queries)
+    pathsAndRects?: HTMLElement[]
+    absoluteX?: number
+    isRevealed?: boolean
+    isActive?: boolean
 }
 
 export interface VexFlowRenderResult {
