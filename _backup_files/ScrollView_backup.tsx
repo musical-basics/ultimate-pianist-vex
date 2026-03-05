@@ -9,7 +9,6 @@ import { parseWithOsmd } from '@/lib/score/OsmdParser'
 import { parseMusicXml } from '@/lib/score/MusicXmlParser'
 import type { IntermediateScore } from '@/lib/score/IntermediateScore'
 import { VexFlowRenderer, type NoteData, type VexFlowRenderResult } from './VexFlowRenderer'
-import { bakeMidiOntoNotes, velocityToCSS } from '@/lib/score/midiMatcher'
 
 interface ScrollViewProps {
     xmlUrl: string | null
@@ -344,15 +343,6 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
 
     // ─── Dark Mode & Effects coloring invalidation ────────────────────
     const previewEffects = useAppStore((s) => s.previewEffects)
-    const parsedMidi = useAppStore((s) => s.parsedMidi)
-
-    // ─── Bake MIDI velocity/duration onto NoteData ────────────────────
-    useEffect(() => {
-        if (!isLoaded || noteMap.current.size === 0) return
-        bakeMidiOntoNotes(noteMap.current, parsedMidi, anchors, beatAnchors)
-        // Invalidate active state so notes re-render with new colors
-        noteMap.current.forEach(notes => notes.forEach(n => { n.isActive = undefined }))
-    }, [isLoaded, parsedMidi, anchors, beatAnchors])
     useEffect(() => {
         const baseColor = darkMode ? '#e0e0e0' : '#000000'
         const bgColor = darkMode ? '#18181b' : '#ffffff'
@@ -510,7 +500,7 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
                 }
 
                 const defaultColor = darkMode ? '#e0e0e0' : '#000000'
-                const fallbackHighlight = '#10B981'; const fallbackShadow = '#10B981'
+                const highlightColor = '#10B981'; const shadowColor = '#10B981'
 
                 notesInMeasure.forEach(note => {
                     if (!note.element) return
@@ -525,10 +515,8 @@ const ScrollViewComponent: React.FC<ScrollViewProps> = ({
                         let tFill = defaultColor, tFilter = 'none', tTransform = 'scale(1) translateY(0)'
 
                         if (isActive) {
-                            const dynColor = note.velocity !== undefined ? velocityToCSS(note.velocity) : fallbackHighlight
-                            const dynShadow = note.velocity !== undefined ? velocityToCSS(note.velocity) : fallbackShadow
-                            if (highlightNote) tFill = dynColor
-                            if (glowEffect) tFilter = `drop-shadow(0 0 6px ${dynShadow})`
+                            if (highlightNote) tFill = highlightColor
+                            if (glowEffect) tFilter = `drop-shadow(0 0 6px ${shadowColor})`
                             tTransform = `scale(${popEffect ? 1.4 : 1}) translateY(${jumpEffect ? -10 : 0}px)`
                         }
 

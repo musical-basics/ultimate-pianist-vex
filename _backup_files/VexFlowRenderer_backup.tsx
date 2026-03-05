@@ -34,7 +34,6 @@ import {
 } from './VexFlowHelpers'
 
 export type { NoteData, VexFlowRenderResult }
-import { vexKeyToMidi } from '@/lib/score/midiMatcher'
 
 interface VexFlowRendererProps {
     score: IntermediateScore | null
@@ -340,11 +339,6 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                                 }
                             } catch { /* ignore */ }
 
-                            // Convert VexFlow keys to MIDI pitch numbers for matching
-                            const pitches = note.isRest ? undefined : note.keys
-                                .map(k => vexKeyToMidi(k))
-                                .filter((p): p is number => p !== undefined)
-
                             measureNoteData.push({
                                 id: note.vfId,
                                 measureIndex: measureNumber,
@@ -354,7 +348,6 @@ const VexFlowRendererComponent: React.FC<VexFlowRendererProps> = ({
                                 element,
                                 stemElement: null,
                                 pathsAndRects,
-                                pitches: pitches && pitches.length > 0 ? pitches : undefined,
                             })
                         })
                     }

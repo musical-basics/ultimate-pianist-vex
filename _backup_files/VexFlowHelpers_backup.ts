@@ -29,10 +29,6 @@ export type NoteData = {
     absoluteX?: number
     isRevealed?: boolean
     isActive?: boolean
-    // MIDI-matched fields (baked by midiMatcher)
-    pitches?: number[]        // MIDI pitch numbers from VexFlow keys (e.g. [60, 64, 67])
-    velocity?: number         // Matched MIDI velocity (0-127)
-    midiDurationSec?: number  // Matched MIDI note duration in seconds
 }
 
 export interface VexFlowRenderResult {
