@@ -3,8 +3,9 @@
 import * as React from 'react'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { Save, ArrowLeft, Music, FileMusic, FileAudio } from 'lucide-react'
+import { Save, ArrowLeft, Music, FileMusic, FileAudio, SkipBack, Play, Pause, Square } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Slider } from '@/components/ui/slider'
 import { SplitScreenLayout } from '@/components/layout/SplitScreenLayout'
 import { AnchorSidebar } from '@/components/score/AnchorSidebar'
 import { WaveformTimeline } from '@/components/score/WaveformTimeline'
@@ -36,6 +37,8 @@ export default function AdminEditor() {
     const xmlEventsRef = useRef<XMLEvent[]>([]) // Persists fermata data across OSMD re-renders
     const [v5State, setV5State] = useState<V5MapperState | null>(null)
     const { musicFont, setFont } = useMusicFont()
+    const [displayTime, setDisplayTime] = useState(0)
+    const displayRafRef = useRef<number>(0)
 
     const anchors = useAppStore((s) => s.anchors)
     const beatAnchors = useAppStore((s) => s.beatAnchors)
@@ -237,6 +240,30 @@ export default function AdminEditor() {
         if (isPlaying) { pm.pause(); setPlaying(false) }
         else { await pm.play(); setPlaying(true) }
     }
+
+    const handleStop = useCallback(() => {
+        const pm = getPlaybackManager()
+        pm.pause()
+        pm.seek(0)
+        setPlaying(false)
+        setDisplayTime(0)
+    }, [setPlaying])
+
+    const formatTime = (s: number) => {
+        const m = Math.floor(s / 60)
+        const sec = Math.floor(s % 60)
+        return `${m.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`
+    }
+
+    // rAF loop to poll current playback time for the transport slider
+    useEffect(() => {
+        const tick = () => {
+            setDisplayTime(getPlaybackManager().getTime())
+            displayRafRef.current = requestAnimationFrame(tick)
+        }
+        displayRafRef.current = requestAnimationFrame(tick)
+        return () => cancelAnimationFrame(displayRafRef.current)
+    }, [])
 
     const handleSeek = useCallback((time: number) => {
         getPlaybackManager().seek(time)
@@ -528,8 +555,32 @@ export default function AdminEditor() {
 
                         <div className="w-px h-6 bg-zinc-700 mx-1" />
 
-                        <Button size="sm" onClick={handlePlayPause} className="bg-purple-600 hover:bg-purple-700 text-white">
-                            {isPlaying ? '⏸ Pause' : '▶ Play'}
+                        {/* Transport */}
+                        <span className="font-mono text-xs text-zinc-400 w-12 text-right tabular-nums">
+                            {formatTime(displayTime)}
+                        </span>
+                        <div className="w-36">
+                            <Slider
+                                value={[displayTime]}
+                                min={0}
+                                max={duration || 100}
+                                step={0.1}
+                                onValueChange={(v) => handleSeek(v[0])}
+                                className="[&_[data-slot=slider-track]]:bg-zinc-700 [&_[data-slot=slider-range]]:bg-purple-500"
+                            />
+                        </div>
+                        <span className="font-mono text-xs text-zinc-400 w-12 tabular-nums">
+                            {formatTime(duration)}
+                        </span>
+
+                        <Button variant="ghost" size="sm" onClick={() => handleSeek(Math.max(0, displayTime - 5))} className="text-zinc-400 h-8 px-1">
+                            <SkipBack className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button size="sm" onClick={handlePlayPause} className="bg-purple-600 hover:bg-purple-700 text-white rounded-full w-8 h-8 p-0">
+                            {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 ml-0.5" />}
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={handleStop} className="text-zinc-400 h-8 px-1">
+                            <Square className="w-3.5 h-3.5" />
                         </Button>
 
                         <Button size="sm" onClick={toggleRecordMode} className={`text-white ${isRecording ? 'bg-red-600 hover:bg-red-700 animate-pulse' : 'bg-zinc-700 hover:bg-zinc-600'}`}>
