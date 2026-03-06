@@ -7,7 +7,7 @@
 import * as React from 'react'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { ArrowLeft, Play, Pause, Square, SkipBack, Music2, Palette, Sparkles, BookOpen, Piano } from 'lucide-react'
+import { ArrowLeft, Play, Pause, Square, SkipBack, Music2, Palette, Sparkles, BookOpen, Piano, Moon, Sun } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
 import { SplitScreenLayout } from '@/components/layout/SplitScreenLayout'
@@ -53,6 +53,8 @@ export default function LearnPlayback() {
     const setShowScore = useAppStore((s) => s.setShowScore)
     const showWaterfall = useAppStore((s) => s.showWaterfall)
     const setShowWaterfall = useAppStore((s) => s.setShowWaterfall)
+    const darkMode = useAppStore((s) => s.darkMode)
+    const setDarkMode = useAppStore((s) => s.setDarkMode)
 
 
     // ─── Load config ──────────────────────────────────────────────
@@ -284,6 +286,15 @@ export default function LearnPlayback() {
                         className={`text-xs rounded-full px-3 h-7 ${showWaterfall ? 'bg-purple-600 border-purple-600 text-white' : 'border-zinc-700 text-zinc-400'}`}
                     >
                         <Piano className="w-3 h-3" />
+                    </Button>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setDarkMode(!darkMode)}
+                        title={darkMode ? 'Light mode' : 'Dark mode'}
+                        className={`text-xs rounded-full px-3 h-7 ${darkMode ? 'bg-yellow-500 border-yellow-500 text-zinc-900' : 'border-zinc-700 text-zinc-400'}`}
+                    >
+                        {darkMode ? <Sun className="w-3 h-3" /> : <Moon className="w-3 h-3" />}
                     </Button>
                     <div className="w-px h-4 bg-zinc-700" />
                     <Button
