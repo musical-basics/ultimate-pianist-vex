@@ -3,7 +3,7 @@
 import * as React from 'react'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { Save, ArrowLeft, Music, FileMusic, FileAudio, SkipBack, Play, Pause, Square, FolderOpen, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Save, ArrowLeft, Music, FileMusic, FileAudio, SkipBack, Play, Pause, Square, FolderOpen, ChevronLeft, ChevronRight, BookOpen, Piano } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
 import { SplitScreenLayout } from '@/components/layout/SplitScreenLayout'
@@ -69,6 +69,10 @@ export default function AdminEditor() {
     const currentMeasure = useAppStore((s) => s.currentMeasure)
     const duration = useAppStore((s) => s.duration)
     const loadMidi = useAppStore((s) => s.loadMidi)
+    const showScore = useAppStore((s) => s.showScore)
+    const setShowScore = useAppStore((s) => s.setShowScore)
+    const showWaterfall = useAppStore((s) => s.showWaterfall)
+    const setShowWaterfall = useAppStore((s) => s.setShowWaterfall)
 
     const audioInputRef = useRef<HTMLInputElement>(null)
     const xmlInputRef = useRef<HTMLInputElement>(null)
@@ -604,6 +608,28 @@ export default function AdminEditor() {
 
                             <Button size="sm" onClick={toggleRecordMode} className={`text-white ${isRecording ? 'bg-red-600 hover:bg-red-700 animate-pulse' : 'bg-zinc-700 hover:bg-zinc-600'}`}>
                                 ⏺ {isRecording ? `Rec (M${nextMeasure})` : 'Record'}
+                            </Button>
+
+                            <div className="w-px h-6 bg-zinc-700 mx-1" />
+
+                            {/* View toggles */}
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => { if (showWaterfall) setShowScore(!showScore) }}
+                                title={showScore ? 'Hide sheet music' : 'Show sheet music'}
+                                className={`text-xs rounded-full px-2 h-7 ${showScore ? 'bg-purple-600 border-purple-600 text-white' : 'border-zinc-700 text-zinc-400'}`}
+                            >
+                                <BookOpen className="w-3 h-3" />
+                            </Button>
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => { if (showScore) setShowWaterfall(!showWaterfall) }}
+                                title={showWaterfall ? 'Hide waterfall' : 'Show waterfall'}
+                                className={`text-xs rounded-full px-2 h-7 ${showWaterfall ? 'bg-purple-600 border-purple-600 text-white' : 'border-zinc-700 text-zinc-400'}`}
+                            >
+                                <Piano className="w-3 h-3" />
                             </Button>
                         </div>
                     </div>
